@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 255 255 255;
+  --foreground: 15 23 42;
+  --primary: 21 128 61;
+  --primary-foreground: 255 255 255;
+  --secondary: 240 253 244;
+  --secondary-foreground: 20 83 45;
+  --border: 226 232 240;
+  --input: 226 232 240;
+  --ring: 21 128 61;
+}
+
+.dark {
+  --background: 15 23 42;
+  --foreground: 241 245 249;
+  --primary: 74 222 128;
+  --primary-foreground: 20 83 45;
+  --secondary: 30 41 59;
+  --secondary-foreground: 187 247 208;
+  --border: 51 65 85;
+  --input: 51 65 85;
+  --ring: 74 222 128;
+}
+
+body {
+  @apply bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100;
+}
+
+.rtl {
+  direction: rtl;
+}
+
+.ltr {
+  direction: ltr;
+}
