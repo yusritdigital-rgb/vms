@@ -186,8 +186,25 @@ export function generateMisusePDF(mu: MisuseRegistrationWithItems, lang: PdfLang
       </div>
     </div>
 
+    <!-- Payment information (bank & IBAN) -->
+    <div style="margin-top: 20px; padding: 16px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f8fafc;">
+      <div style="font-size: 11px; font-weight: 700; color: #64748b; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.6px;">
+        ${lang === 'ar' ? 'معلومات الدفع' : 'Payment Information'}
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div>
+          <span style="font-size: 10px; color: #64748b;">${lang === 'ar' ? 'البنك' : 'Bank'}</span>
+          <div style="font-size: 13px; font-weight: 700; color: #0b1220;">${lang === 'ar' ? 'بنك الرياض' : 'Riyadh Bank'}</div>
+        </div>
+        <div>
+          <span style="font-size: 10px; color: #64748b;">${lang === 'ar' ? 'الايبان' : 'IBAN'}</span>
+          <div style="font-size: 13px; font-weight: 700; color: #0b1220; font-family: monospace;">SA4520000001000409259940</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Service-manager signature (compact card) -->
-    ${managerSignatureBlock(lang)}
+    ${managerSignatureBlock(lang, { serviceManagerName: lang === 'ar' ? 'محمد فوزي' : 'Mohammed Fawzi' })}
 
     <!-- Company footer strip — horizontal, sticks to the bottom edge -->
     ${companyFooterStrip(lang)}
