@@ -50,7 +50,7 @@ export default function CaseHistoryTable() {
       .select(`
         id, job_card_number, status, received_at, delivered_at, completed_at,
         workshop_name,
-        vehicle:vehicles(plate_number, brand, model)
+        vehicle:vehicles!job_cards_vehicle_id_fkey(plate_number, brand, model)
       `)
       .in('status', statusFilter)
       .order('completed_at', { ascending: false })

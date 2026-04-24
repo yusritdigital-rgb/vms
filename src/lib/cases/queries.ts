@@ -44,7 +44,8 @@ const CASE_SELECT = `
   complaint_description, internal_notes,
   entry_odometer, exit_odometer,
   created_at, last_updated_at, last_updated_by,
-  vehicle:vehicles(plate_number, project_code, brand, model, chassis_number)
+  vehicle:vehicles!job_cards_vehicle_id_fkey(plate_number, project_code, brand, model, chassis_number),
+  replacement_vehicle:vehicles!job_cards_replacement_vehicle_id_fkey(id, plate_number, project_code, brand, model)
 `
 
 // Bare fallback — zero joins. Used when the embed above errors, so a
@@ -57,7 +58,9 @@ const CASE_SELECT_BARE = `
   vehicle_id, replacement_vehicle_id,
   complaint_description, internal_notes,
   entry_odometer, exit_odometer,
-  created_at, last_updated_at, last_updated_by
+  created_at, last_updated_at, last_updated_by,
+  vehicle:vehicles!job_cards_vehicle_id_fkey(plate_number, project_code, brand, model, chassis_number),
+  replacement_vehicle:vehicles!job_cards_replacement_vehicle_id_fkey(id, plate_number, project_code, brand, model)
 `
 
 // ─────────────────────────────────────────────────────
@@ -148,14 +151,29 @@ export async function listCaseUpdates(caseId: string): Promise<CaseUpdateRow[]> 
   return (data as unknown as CaseUpdateRow[]) ?? []
 }
 
-/** Closed-only list for the History page. */
+/** Closed-only list for the History page.
+ *
+ *  The filter is `status IN (closed)` — that is the ONLY gate.
+ *  `completed_at` is intentionally NOT required because legacy rows
+ *  that were closed before the `applyCaseUpdate` helper existed may
+ *  not have a `completed_at` stamp. Sorting uses `received_at` (which
+ *  is NOT NULL on every row) so no closed case can be hidden because
+ *  of a null sort key. We also accept a handful of legacy English
+ *  status values so pre-migration data still surfaces here. */
 export async function listClosedCases(): Promise<CaseRow[]> {
   const supabase = createClient()
+  // Arabic canonical + legacy English equivalents seen in old data.
+  const statusFilter: string[] = [
+    ...(CLOSED_STATUSES as readonly string[]),
+    'delivered',
+    'sold',
+    'total_loss',
+  ]
   const { data, error } = await supabase
     .from('job_cards')
     .select(CASE_SELECT)
-    .in('status', CLOSED_STATUSES as unknown as string[])
-    .order('completed_at', { ascending: false })
+    .in('status', statusFilter)
+    .order('received_at', { ascending: false })
     .limit(1000)
   if (error) { logPgError('[cases/queries] listClosedCases failed', error); return [] }
   return (data as unknown as CaseRow[]) ?? []
@@ -168,6 +186,8 @@ export async function listClosedCases(): Promise<CaseRow[]> {
 export interface CreateCaseInput {
   vehicle_id: string
   type: 'accident' | 'mechanical'
+  /** Optional initial status. Defaults to 'بانتظار تقدير'. */
+  status?: string
   workshop_id: string | null
   workshop_name: string | null
   workshop_city: string | null
@@ -188,7 +208,7 @@ export async function createCase(input: CreateCaseInput): Promise<CaseRow> {
   const payload: Record<string, any> = {
     vehicle_id:              input.vehicle_id,
     type:                    input.type,
-    status:                  'بانتظار تقدير',
+    status:                  input.status && input.status.trim() ? input.status : 'بانتظار تقدير',
     workshop_id:             input.workshop_id,
     workshop_name:           input.workshop_name,
     workshop_city:           input.workshop_city,

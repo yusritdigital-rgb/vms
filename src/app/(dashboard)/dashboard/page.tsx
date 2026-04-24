@@ -156,7 +156,7 @@ export default function DashboardPage() {
         .select('id, project_code')
       const recentQuery = supabase
         .from('job_cards')
-        .select('id, job_card_number, type, status, created_at, vehicle:vehicles(plate_number)')
+        .select('id, job_card_number, type, status, created_at, vehicle:vehicles!job_cards_vehicle_id_fkey(plate_number)')
         .order('created_at', { ascending: false })
         .limit(5)
 

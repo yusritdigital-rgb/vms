@@ -40,7 +40,7 @@ export default function AdminJobCardsPage() {
     const supabase = createClient()
     let query = supabase
       .from('job_cards')
-      .select('id, job_card_number, type, status, created_at, vehicle:vehicles(plate_number), company:companies(name_ar, name_en)')
+      .select('id, job_card_number, type, status, created_at, vehicle:vehicles!job_cards_vehicle_id_fkey(plate_number), company:companies(name_ar, name_en)')
       .order('created_at', { ascending: false })
     if (selectedCompanyId) query = query.eq('company_id', selectedCompanyId)
     const { data } = await query

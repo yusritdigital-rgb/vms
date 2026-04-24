@@ -31,7 +31,8 @@ const CASE_SELECT = `
   complaint_description, internal_notes,
   entry_odometer, exit_odometer,
   created_at, last_updated_at, last_updated_by,
-  vehicle:vehicles(plate_number, project_code, brand, model)
+  vehicle:vehicles!job_cards_vehicle_id_fkey(plate_number, project_code, brand, model),
+  replacement_vehicle:vehicles!job_cards_replacement_vehicle_id_fkey(id, plate_number, project_code, brand, model)
 `
 
 // Last-resort select — NO joins at all. If even `vehicle:vehicles(...)`
@@ -44,7 +45,9 @@ const CASE_SELECT_BARE = `
   vehicle_id, replacement_vehicle_id,
   complaint_description, internal_notes,
   entry_odometer, exit_odometer,
-  created_at, last_updated_at, last_updated_by
+  created_at, last_updated_at, last_updated_by,
+  vehicle:vehicles!job_cards_vehicle_id_fkey(plate_number, project_code, brand, model),
+  replacement_vehicle:vehicles!job_cards_replacement_vehicle_id_fkey(id, plate_number, project_code, brand, model)
 `
 
 export interface UseCasesStream {

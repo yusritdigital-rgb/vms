@@ -41,7 +41,7 @@ export default function DeliveryAfterMaintenancePage() {
       const supabase = createClient()
       let query = supabase.from('job_cards').select(`
           *,
-          vehicle:vehicles(plate_number, chassis_number, brand, model, reserve:reserves(name_ar, name_en))
+          vehicle:vehicles!job_cards_vehicle_id_fkey(plate_number, chassis_number, brand, model, reserve:reserves(name_ar, name_en))
         `).eq('status', 'delivered').order('created_at', { ascending: false })
       query = query.eq('company_id', companyId!)
       const { data, error } = await query
