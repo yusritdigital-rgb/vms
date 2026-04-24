@@ -42,6 +42,7 @@ const CaseStatusChart      = dynamic(() => import('@/components/dashboard/CaseSt
 const MonthlyTrendChart    = dynamic(() => import('@/components/dashboard/MonthlyTrendChart'),    { ssr: false })
 const WeeklyActivityHeatmap= dynamic(() => import('@/components/dashboard/WeeklyActivityHeatmap'),{ ssr: false })
 const CaseHistoryTable     = dynamic(() => import('@/components/dashboard/CaseHistoryTable'),     { ssr: false })
+const WorkshopsMap         = dynamic(() => import('@/components/dashboard/WorkshopsMap'),         { ssr: false })
 
 // ─────────────────────────────────────────────────────
 // Types
@@ -453,6 +454,9 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* ═══ 5.5. WORKSHOPS MAP ═══ */}
+      <WorkshopsMap language={language} />
 
       {/* ═══ 6. STATUS DISTRIBUTION (full width) ═══ */}
       <CaseStatusChart distribution={stats.statusDistribution} includeZeros />
