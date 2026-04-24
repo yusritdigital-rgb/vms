@@ -206,7 +206,7 @@ export default function CreateCasePage() {
   const sectionHeaderCls = 'flex items-center gap-2 mb-1'
 
   return (
-    <div className="max-w-6xl mx-auto space-y-5" dir={isAr ? 'rtl' : 'ltr'}>
+    <div className="max-w-7xl mx-auto px-4 space-y-5" dir={isAr ? 'rtl' : 'ltr'}>
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -229,8 +229,8 @@ export default function CreateCasePage() {
 
       <form onSubmit={onSubmit} className="space-y-4 pb-24">
         {/* ═══ Row 1: Vehicle + Case Type  (2-col on md+) ═══ */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <section className={`${sectionCls} md:col-span-2`}>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <section className={`${sectionCls} lg:col-span-2`}>
             <div className={sectionHeaderCls}>
               <Car className="w-4 h-4 text-red-600" />
               <h2 className="text-sm font-bold text-gray-900 dark:text-white">
@@ -295,7 +295,7 @@ export default function CreateCasePage() {
               {isAr ? 'الورشة والتوقيت' : 'Workshop & Timing'}
             </h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div>
               <label className={labelCls}>{isAr ? 'الورشة' : 'Workshop'}</label>
               <SearchableSelect
@@ -344,7 +344,7 @@ export default function CreateCasePage() {
               {isAr ? 'الوصف والملاحظات' : 'Description & Notes'}
             </h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>{isAr ? 'الشكوى / الوصف' : 'Complaint / description'}</label>
               <textarea
@@ -371,7 +371,7 @@ export default function CreateCasePage() {
         </section>
 
         {/* ═══ Row 4: Initial status + Replacement vehicle  (2-col) ═══ */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <section className={sectionCls}>
             <div className={sectionHeaderCls}>
               <Tag className="w-4 h-4 text-red-600" />
@@ -492,7 +492,7 @@ export default function CreateCasePage() {
 
         {/* ═══ Sticky footer — submit ═══ */}
         <div className="fixed inset-x-0 bottom-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur border-t border-gray-200 dark:border-slate-800 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
-          <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
+          <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
           <div className="text-xs text-amber-600 dark:text-amber-400 min-h-[1rem]">
             {validationError ?? ''}
           </div>

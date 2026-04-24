@@ -2,9 +2,9 @@
 // POST /api/appointments/send-confirmation
 // -----------------------------------------------------
 // Sends a professional bilingual confirmation email to the customer
-// after an appointment is created, using Resend.
+// after an appointment is created, using Brevo (Sendinblue).
 //
-// Server-side only. `RESEND_API_KEY` is never exposed to the client.
+// Server-side only. `BREVO_API_KEY` is never exposed to the client.
 // Called after the appointment row is already saved — failure here
 // must NOT break appointment creation, so callers treat a non-OK
 // response as a soft-warning only.
@@ -12,9 +12,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 
-const RESEND_ENDPOINT = 'https://api.resend.com/emails'
-const FROM_ADDRESS    = 'Pioneer Lease <onboarding@resend.dev>'
-const SUBJECT_AR      = 'تأكيد موعد صيانة المركبة - شركة الأوائل للتأجير'
+const BREVO_ENDPOINT = 'https://api.brevo.com/v3/smtp/email'
+const SUBJECT_AR = 'تأكيد موعد صيانة المركبة - شركة الأوائل للتأجير'
 
 interface Payload {
   to:                string
@@ -155,12 +154,18 @@ function buildHtml(p: Payload): string {
 }
 
 export async function POST(request: NextRequest) {
-  const apiKey = process.env.RESEND_API_KEY
+  const apiKey = process.env.BREVO_API_KEY
   if (!apiKey) {
+    console.error('[Brevo] BREVO_API_KEY not configured')
     return NextResponse.json(
-      { ok: false, error: 'resend_api_key_not_configured' },
+      { success: false, error: 'brevo_api_key_not_configured' },
       { status: 500 }
     )
+  }
+
+  const senderEmail = process.env.BREVO_SENDER_EMAIL
+  if (!senderEmail) {
+    console.warn('[Brevo] BREVO_SENDER_EMAIL not configured, using fallback')
   }
 
   let body: Payload
@@ -178,34 +183,59 @@ export async function POST(request: NextRequest) {
   const html = buildHtml(body)
 
   try {
-    const res = await fetch(RESEND_ENDPOINT, {
+    const res = await fetch(BREVO_ENDPOINT, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type':  'application/json',
+        'Content-Type': 'application/json',
+        'api-key': apiKey,
       },
       body: JSON.stringify({
-        from:    FROM_ADDRESS,
-        to:      [to],
+        sender: {
+          name: 'Pioneer Lease',
+          email: senderEmail || 'YOUR_VERIFIED_BREVO_EMAIL',
+        },
+        to: [
+          {
+            email: to,
+            name: body.customer_name || 'Customer',
+          },
+        ],
         subject: SUBJECT_AR,
-        html,
+        htmlContent: html,
       }),
     })
 
-    const json = await res.json().catch(() => ({}))
+    const result = await res.json().catch(() => null)
 
     if (!res.ok) {
+      console.error('[Brevo] failed to send appointment email', {
+        status: res.status,
+        result,
+      })
+
       return NextResponse.json(
-        { ok: false, error: 'resend_failed', status: res.status, details: json },
-        { status: 502 }
+        {
+          success: false,
+          error: result?.message || 'Failed to send email',
+          details: result,
+        },
+        { status: 200 }
       )
     }
 
-    return NextResponse.json({ ok: true, id: (json as any)?.id ?? null })
+    return NextResponse.json({
+      success: true,
+      result,
+    })
   } catch (err: any) {
+    console.error('[Brevo] network error', err)
     return NextResponse.json(
-      { ok: false, error: 'network_error', message: err?.message || String(err) },
-      { status: 502 }
+      {
+        success: false,
+        error: 'network_error',
+        message: err?.message || String(err),
+      },
+      { status: 200 }
     )
   }
 }

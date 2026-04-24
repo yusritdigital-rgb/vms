@@ -263,7 +263,7 @@ export default function AppointmentModal({ open, onClose, onSaved, existing }: P
           }),
         })
         const json = await res.json().catch(() => ({}))
-        mailOk = !!(res.ok && json?.ok)
+        mailOk = !!(res.ok && json?.success)
         if (!mailOk) console.warn('[appointments] email send failed', json)
       } catch (err) {
         console.warn('[appointments] email send network error', err)
