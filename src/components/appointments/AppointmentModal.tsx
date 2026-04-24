@@ -12,7 +12,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import {
-  X, User, Phone, Car, ClipboardList, StickyNote,
+  X, User, Phone, Mail, Car, ClipboardList, StickyNote,
   CalendarDays, Loader2, Save, Gauge, CheckCircle2,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -26,6 +26,7 @@ import {
   TYPE_LABEL_AR,
   formatAppointmentNumber,
   formatAppointmentSummaryAr,
+  formatTimeLabelAr,
   normaliseTime,
   toYMD,
 } from '@/lib/appointments/types'
@@ -53,6 +54,7 @@ export default function AppointmentModal({ open, onClose, onSaved, existing }: P
   // ─── Form state ───
   const [customerName, setCustomerName]   = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
+  const [customerEmail, setCustomerEmail] = useState('')
   const [vehicleId, setVehicleId]         = useState('')
   const [mileage, setMileage]             = useState<number | ''>('')
   const [complaint, setComplaint]         = useState('')
@@ -73,6 +75,7 @@ export default function AppointmentModal({ open, onClose, onSaved, existing }: P
     if (existing) {
       setCustomerName(existing.customer_name)
       setCustomerPhone(existing.customer_phone ?? '')
+      setCustomerEmail(existing.customer_email ?? '')
       setVehicleId(existing.vehicle_id ?? '')
       setMileage(existing.mileage ?? '')
       setComplaint(existing.complaint ?? '')
@@ -83,6 +86,7 @@ export default function AppointmentModal({ open, onClose, onSaved, existing }: P
     } else {
       setCustomerName('')
       setCustomerPhone('')
+      setCustomerEmail('')
       setVehicleId('')
       setMileage('')
       setComplaint('')
@@ -175,6 +179,7 @@ export default function AppointmentModal({ open, onClose, onSaved, existing }: P
     const payload: Record<string, any> = {
       customer_name: customerName.trim(),
       customer_phone: customerPhone.trim() || null,
+      customer_email: customerEmail.trim() || null,
       vehicle_id: vehicleId || null,
       vehicle_plate: selectedVehicle?.plate_number ?? null,
       vehicle_label: selectedVehicle
@@ -233,7 +238,44 @@ export default function AppointmentModal({ open, onClose, onSaved, existing }: P
       toast.error(error?.message || 'تعذر حفظ الموعد')
       return
     }
-    toast.success(existing ? 'تم تحديث الموعد ✓' : `تم إنشاء الموعد ${saved.appointment_number} ✓`)
+
+    // ── Optional confirmation email (only on create, only if an email was given).
+    // Appointment creation must NEVER fail because of email issues, so this is
+    // a fully isolated soft-path with its own toast copy.
+    const email = customerEmail.trim()
+    if (!existing && email) {
+      let mailOk = false
+      try {
+        const summary = formatAppointmentSummaryAr(date, time)
+        const res = await fetch('/api/appointments/send-confirmation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to:                email,
+            customer_name:     saved.customer_name,
+            appointment_type:  TYPE_LABEL_AR[(saved.appointment_type as AppointmentType) ?? 'maintenance'],
+            vehicle_plate:     saved.vehicle_plate,
+            vehicle_label:     saved.vehicle_label,
+            scheduled_date:    saved.scheduled_date,
+            scheduled_time:    time ? formatTimeLabelAr(time) : null,
+            workshop:          null,
+            summary_ar:        summary,
+          }),
+        })
+        const json = await res.json().catch(() => ({}))
+        mailOk = !!(res.ok && json?.ok)
+        if (!mailOk) console.warn('[appointments] email send failed', json)
+      } catch (err) {
+        console.warn('[appointments] email send network error', err)
+        mailOk = false
+      }
+
+      if (mailOk) toast.success('تم إنشاء الموعد وإرسال رسالة للعميل')
+      else        toast.warning('تم إنشاء الموعد لكن تعذر إرسال البريد الإلكتروني')
+    } else {
+      toast.success(existing ? 'تم تحديث الموعد ✓' : `تم إنشاء الموعد ${saved.appointment_number} ✓`)
+    }
+
     onSaved(saved)
   }
 
@@ -302,6 +344,24 @@ export default function AppointmentModal({ open, onClose, onSaved, existing }: P
                     className={`${inputCls} ps-9`}
                   />
                 </div>
+              </div>
+              <div className="sm:col-span-2">
+                <label className={labelCls}>إيميل العميل (اختياري) · Customer Email</label>
+                <div className="relative">
+                  <Mail className="absolute top-1/2 -translate-y-1/2 start-3 w-4 h-4 text-gray-400" />
+                  <input
+                    value={customerEmail}
+                    onChange={(e) => setCustomerEmail(e.target.value)}
+                    placeholder="customer@example.com"
+                    type="email"
+                    inputMode="email"
+                    dir="ltr"
+                    className={`${inputCls} ps-9`}
+                  />
+                </div>
+                <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                  عند إدخال الإيميل سيتم إرسال رسالة تأكيد الموعد للعميل تلقائيًا.
+                </p>
               </div>
             </div>
           </section>

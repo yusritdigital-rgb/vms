@@ -53,6 +53,7 @@ export interface Appointment {
   appointment_number: string
   customer_name: string
   customer_phone: string | null
+  customer_email: string | null
   vehicle_id: string | null
   vehicle_plate: string | null
   vehicle_label: string | null

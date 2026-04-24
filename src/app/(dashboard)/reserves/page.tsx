@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Plus, CalendarClock, CalendarDays, Loader2, Search, Pencil, Trash2,
-  User, Car, Phone, Clock, Timer, CheckCircle2, XCircle, Ban, Eye,
+  User, Car, Phone, Mail, Clock, Timer, CheckCircle2, XCircle, Ban, Eye,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useTranslation } from '@/hooks/useTranslation'
@@ -230,6 +230,11 @@ function AppointmentCard({
           {a.customer_phone && (
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 flex items-center gap-1">
               <Phone className="w-3 h-3" /> {a.customer_phone}
+            </p>
+          )}
+          {a.customer_email && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 flex items-center gap-1" dir="ltr">
+              <Mail className="w-3 h-3" /> {a.customer_email}
             </p>
           )}
         </div>
