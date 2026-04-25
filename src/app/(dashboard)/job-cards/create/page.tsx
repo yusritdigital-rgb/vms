@@ -31,23 +31,13 @@ import {
 } from 'lucide-react'
 
 import { useTranslation } from '@/hooks/useTranslation'
-import { createClient } from '@/lib/supabase/client'
+import { useAllVehicles, buildVehicleSearchText, formatVehicleLabel, formatVehicleSublabel, type VehicleLite } from '@/hooks/useAllVehicles'
 import { toast } from '@/components/ui/Toast'
 import SearchableSelect, { type SearchableOption } from '@/components/ui/SearchableSelect'
 import { createCase } from '@/lib/cases/queries'
 import { WORKSHOPS } from '@/lib/workshops/workshops'
 import { CASE_STATUSES } from '@/lib/cases/statuses'
 import { isRvProjectCode } from '@/lib/alternatives/rules'
-
-interface Vehicle {
-  id: string
-  plate_number: string | null
-  chassis_number: string | null
-  brand: string | null
-  model: string | null
-  project_code: string | null
-  current_odometer: number | null
-}
 
 // ─── No-replacement reasons ───────────────────────────────────────
 // DB CHECK constraint (migration 009) only accepts these exact codes;
@@ -64,9 +54,11 @@ export default function CreateCasePage() {
   const isAr = language === 'ar'
   const router = useRouter()
 
+  // ─── Load all vehicles with pagination ───
+  const { vehicles, loading: loadingVehicles } = useAllVehicles()
+  console.log('[create-case] vehicles loaded', vehicles.length, vehicles)
+
   // ─── Form state ───
-  const [vehicles, setVehicles]     = useState<Vehicle[]>([])
-  const [loadingVehicles, setLoadingVehicles] = useState(true)
   const [vehicleId, setVehicleId]   = useState('')
   const [type, setType]             = useState<'accident' | 'mechanical'>('mechanical')
   const [workshopId, setWorkshopId] = useState('')
@@ -87,22 +79,6 @@ export default function CreateCasePage() {
 
   const [saving, setSaving] = useState(false)
 
-  // ─── Load vehicles ───
-  useEffect(() => {
-    const load = async () => {
-      setLoadingVehicles(true)
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('vehicles')
-        .select('id, plate_number, chassis_number, brand, model, project_code, current_odometer')
-        .order('plate_number')
-      if (error) console.error('[create-case] load vehicles failed', error)
-      setVehicles((data as Vehicle[]) ?? [])
-      setLoadingVehicles(false)
-    }
-    void load()
-  }, [])
-
   // Prefill odometer when a vehicle is selected (only if the user
   // hasn't typed a value yet).
   useEffect(() => {
@@ -116,8 +92,9 @@ export default function CreateCasePage() {
   const vehicleOptions: SearchableOption[] = useMemo(
     () => vehicles.map(v => ({
       value: v.id,
-      label: v.plate_number ?? '—',
-      sublabel: [v.brand, v.model, v.project_code].filter(Boolean).join(' · '),
+      label: formatVehicleLabel(v),
+      sublabel: formatVehicleSublabel(v),
+      searchText: buildVehicleSearchText(v),
     })),
     [vehicles]
   )
@@ -129,8 +106,9 @@ export default function CreateCasePage() {
       .filter(v => isRvProjectCode(v.project_code) && v.id !== vehicleId)
       .map(v => ({
         value: v.id,
-        label: v.plate_number ?? '—',
-        sublabel: [v.brand, v.model, v.project_code].filter(Boolean).join(' · '),
+        label: formatVehicleLabel(v),
+        sublabel: formatVehicleSublabel(v),
+        searchText: buildVehicleSearchText(v),
       }))
   }, [vehicles, vehicleId])
 
