@@ -22,6 +22,10 @@ interface Props {
   endHour?: number
   stepMinutes?: number
   className?: string
+  /** Map of "HH:MM" → existing booking count for the selected date. */
+  counts?: Record<string, number>
+  /** Hard cap per slot. Default = 2. */
+  maxPerSlot?: number
 }
 
 export default function TimeSlotsPicker({
@@ -31,6 +35,8 @@ export default function TimeSlotsPicker({
   endHour = 18,
   stepMinutes = 30,
   className = '',
+  counts = {},
+  maxPerSlot = 2,
 }: Props) {
   const slots = useMemo(
     () => buildTimeSlots({ startHour, endHour, stepMinutes }),
@@ -70,21 +76,40 @@ export default function TimeSlotsPicker({
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
         {slots.map((s) => {
           const selected = s === normalised
+          const count = counts[s] ?? 0
+          const isFull = count >= maxPerSlot && !selected
           return (
             <button
               key={s}
               type="button"
-              onClick={() => { onChange(s); setOtherOpen(false) }}
+              disabled={isFull}
+              onClick={() => { if (isFull) return; onChange(s); setOtherOpen(false) }}
+              title={isFull ? 'ممتلئ' : `${count}/${maxPerSlot}`}
               className={[
-                'relative py-2 rounded-xl text-[12.5px] font-semibold transition-all select-none active:scale-95',
-                selected
-                  ? 'bg-red-600 text-white shadow-sm shadow-red-600/30'
-                  : 'bg-gray-50 text-gray-700 hover:bg-red-50 hover:text-red-700 border border-gray-200 dark:bg-slate-800 dark:text-gray-300 dark:border-slate-700 dark:hover:bg-red-900/30 dark:hover:text-red-300',
+                'relative pt-2 pb-4 rounded-xl text-[12.5px] font-semibold transition-all select-none',
+                isFull
+                  ? 'bg-gray-100 text-gray-400 border border-gray-200 dark:bg-slate-800/60 dark:text-gray-600 dark:border-slate-700 cursor-not-allowed'
+                  : selected
+                    ? 'bg-red-600 text-white shadow-sm shadow-red-600/30 active:scale-95'
+                    : 'bg-gray-50 text-gray-700 hover:bg-red-50 hover:text-red-700 border border-gray-200 dark:bg-slate-800 dark:text-gray-300 dark:border-slate-700 dark:hover:bg-red-900/30 dark:hover:text-red-300 active:scale-95',
               ].join(' ')}
               aria-pressed={selected}
+              aria-disabled={isFull}
             >
               {s}
               {selected && <Check className="w-3 h-3 absolute top-1 end-1" />}
+              <span
+                className={[
+                  'absolute bottom-0.5 inset-x-0 text-[9.5px] font-bold tracking-wide',
+                  isFull
+                    ? 'text-red-500'
+                    : selected
+                      ? 'text-white/90'
+                      : count > 0 ? 'text-amber-600' : 'text-gray-400',
+                ].join(' ')}
+              >
+                {isFull ? 'ممتلئ' : `${count}/${maxPerSlot}`}
+              </span>
             </button>
           )
         })}

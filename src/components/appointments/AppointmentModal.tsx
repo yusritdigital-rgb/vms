@@ -69,6 +69,11 @@ export default function AppointmentModal({ open, onClose, onSaved, existing }: P
   const [loadingVehicles, setLoadingVehicles] = useState(true)
   const [saving, setSaving] = useState(false)
 
+  // Slot occupancy for the selected date — { "HH:MM": count }.
+  // Excludes cancelled appointments; subtracts the current row when editing.
+  const [slotCounts, setSlotCounts] = useState<Record<string, number>>({})
+  const MAX_PER_SLOT = 2
+
   // Reset + prefill when modal opens.
   useEffect(() => {
     if (!open) return
@@ -135,6 +140,33 @@ export default function AppointmentModal({ open, onClose, onSaved, existing }: P
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
+  // Fetch slot occupancy for the selected date.
+  // Cancelled appointments do NOT consume a slot. When editing, the row's own
+  // current slot is excluded so its time stays selectable.
+  useEffect(() => {
+    if (!open || !date) { setSlotCounts({}); return }
+    let cancelled = false
+    ;(async () => {
+      const supabase = createClient()
+      const ymd = toYMD(date)
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('id, scheduled_time, status')
+        .eq('scheduled_date', ymd)
+        .neq('status', 'cancelled')
+      if (cancelled || error || !data) return
+      const map: Record<string, number> = {}
+      for (const r of data as Array<{ id: string; scheduled_time: string }>) {
+        if (existing && r.id === existing.id) continue
+        const k = normaliseTime(r.scheduled_time)
+        if (!k) continue
+        map[k] = (map[k] ?? 0) + 1
+      }
+      setSlotCounts(map)
+    })()
+    return () => { cancelled = true }
+  }, [open, date, existing])
+
   const selectedVehicle = useMemo(
     () => vehicles.find(v => v.id === vehicleId) ?? null,
     [vehicles, vehicleId]
@@ -175,6 +207,29 @@ export default function AppointmentModal({ open, onClose, onSaved, existing }: P
     setSaving(true)
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
+
+    // Race-safe capacity check — re-query right before write so two concurrent
+    // submitters can't both squeeze in past the local slotCounts snapshot.
+    const ymdCheck = toYMD(date!)
+    const { data: existingForSlot, error: capErr } = await supabase
+      .from('appointments')
+      .select('id, scheduled_time, status')
+      .eq('scheduled_date', ymdCheck)
+      .eq('scheduled_time', time)
+      .neq('status', 'cancelled')
+    if (capErr) {
+      setSaving(false)
+      toast.error('تعذر التحقق من توفر الموعد. حاول مجدداً.')
+      return
+    }
+    const blockingCount = (existingForSlot ?? []).filter(
+      r => !(existing && r.id === existing.id)
+    ).length
+    if (blockingCount >= MAX_PER_SLOT) {
+      setSaving(false)
+      toast.error(`هذا الموعد ممتلئ (${MAX_PER_SLOT}/${MAX_PER_SLOT}). اختر وقتاً آخر.`)
+      return
+    }
 
     const payload: Record<string, any> = {
       customer_name: customerName.trim(),
@@ -478,7 +533,12 @@ export default function AppointmentModal({ open, onClose, onSaved, existing }: P
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <CalendarPicker value={date} onChange={setDate} />
-              <TimeSlotsPicker value={time} onChange={setTime} />
+              <TimeSlotsPicker
+                value={time}
+                onChange={setTime}
+                counts={slotCounts}
+                maxPerSlot={MAX_PER_SLOT}
+              />
             </div>
 
             {/* Live summary */}

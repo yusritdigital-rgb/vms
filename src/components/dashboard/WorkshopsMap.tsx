@@ -146,23 +146,31 @@ export default function WorkshopsMap({ language = 'ar' }: WorkshopsMapProps) {
           }
         }
 
-        // Load job cards to calculate delayed cases (> 3 days old and still open)
+        // Load job cards to calculate delayed cases (> 3 days old and still open).
+        // We key by (workshop_name|workshop_city) — NOT workshop_id — because
+        // job_cards.workshop_id stores a slug ("الاوائل__الرياض") while
+        // workshops.id is a UUID. Names + cities are written as a snapshot
+        // by Create Case from the same source, so they always align.
         const threeDaysAgo = new Date()
         threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
         const threeDaysAgoIso = threeDaysAgo.toISOString()
+        const CLOSED = ['تم التسليم للعميل', 'تم البيع', 'خسارة كلية']
 
         const { data: jobCards } = await supabase
           .from('job_cards')
-          .select('workshop_id, received_at, status')
+          .select('workshop_name, workshop_city, received_at, status')
           .lt('received_at', threeDaysAgoIso)
-          .in('status', ['بانتظار تقدير', 'قيد التنفيذ', 'بانتظار قطع غيار', 'بانتظار اعتماد'])
+          .not('workshop_name', 'is', null)
+          .not('status', 'in', `(${CLOSED.map(s => `"${s}"`).join(',')})`)
 
-        // Calculate delayed cases per workshop
+        // Calculate delayed cases per workshop, keyed by "name|city".
+        const nameCityKey = (n: string | null, c: string | null) =>
+          `${(n ?? '').trim()}|${(c ?? '').trim()}`
         const delayedMap = new Map<string, number>()
         if (jobCards) {
-          for (const jc of jobCards) {
-            const current = delayedMap.get(jc.workshop_id) ?? 0
-            delayedMap.set(jc.workshop_id, current + 1)
+          for (const jc of jobCards as Array<{ workshop_name: string | null; workshop_city: string | null }>) {
+            const k = nameCityKey(jc.workshop_name, jc.workshop_city)
+            delayedMap.set(k, (delayedMap.get(k) ?? 0) + 1)
           }
         }
 
@@ -178,7 +186,7 @@ export default function WorkshopsMap({ language = 'ar' }: WorkshopsMapProps) {
             total_cases: countsMap.get(w.id)?.total_cases ?? 0,
             open_cases: countsMap.get(w.id)?.open_cases ?? 0,
             closed_cases: countsMap.get(w.id)?.closed_cases ?? 0,
-            delayed_cases: delayedMap.get(w.id) ?? 0,
+            delayed_cases: delayedMap.get(nameCityKey(w.workshop_name_ar, w.city_ar)) ?? 0,
           }))
 
         setWorkshops(workshopsWithCounts)

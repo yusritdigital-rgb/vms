@@ -36,6 +36,12 @@ import { useCompanyId } from '@/hooks/useCompany'
 import { createClient } from '@/lib/supabase/client'
 import { CASE_STATUSES, STATUS_COLOR, isCaseClosed } from '@/lib/cases/statuses'
 import { notifyVehicleOverdue } from '@/lib/notifications/trigger'
+import {
+  exportOpenCasesExcel,
+  exportClosedCasesExcel,
+  exportAppointmentsExcel,
+} from '@/lib/dashboard/exports'
+import { toast } from '@/components/ui/Toast'
 
 // Chart components (client-only).
 const CaseStatusChart      = dynamic(() => import('@/components/dashboard/CaseStatusChart'),      { ssr: false })
@@ -146,7 +152,10 @@ export default function DashboardPage() {
     try {
       const now = new Date()
       const threeDaysMs = 3 * 24 * 60 * 60 * 1000
-      const todayYmd = now.toISOString().slice(0, 10)
+      // Local YYYY-MM-DD (appointments.scheduled_date is a DATE without TZ, so
+      // comparing against UTC slice would mis-count near midnight in Riyadh).
+      const pad = (n: number) => String(n).padStart(2, '0')
+      const todayYmd = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
 
       // Selects + counts, fired in parallel
       const casesQuery = supabase
@@ -168,11 +177,14 @@ export default function DashboardPage() {
       const appointmentsCountQuery = supabase.from('appointments').select('id', { count: 'exact', head: true })
       const invoicesCountQuery     = supabase.from('invoices')    .select('id', { count: 'exact', head: true })
       const workshopsCountQuery    = supabase.from('workshops')   .select('id', { count: 'exact', head: true })
+      // Finalized = attendance was marked (حضر / لم يحضر) or inspection completed.
+      // Schema uses `scheduled_date` (not `appointment_date`) and the status set
+      // is { scheduled, checked_in, no_show, cancelled, inspected, done }.
       const apptCompletedTodayQuery = supabase
         .from('appointments')
         .select('id', { count: 'exact', head: true })
-        .eq('status', 'completed')
-        .eq('appointment_date', todayYmd)
+        .in('status', ['checked_in', 'no_show', 'inspected', 'done'])
+        .eq('scheduled_date', todayYmd)
 
       const [
         { data: caseRows, error: casesErr },
@@ -331,6 +343,9 @@ export default function DashboardPage() {
             </span>
           </div>
         </div>
+
+        {/* Excel exports — Arabic-first labels for the three required datasets */}
+        <ExportBar isAr={isAr} />
       </div>
 
       {/* ═══ 2. OVERDUE ALERT ═══ */}
@@ -456,7 +471,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ═══ 5.5. WORKSHOPS MAP ═══ */}
-      <WorkshopsMap language={language} />
+      <WorkshopsMap key={`map-${refreshKey}`} language={language} />
 
       {/* ═══ 6. STATUS DISTRIBUTION (full width) ═══ */}
       <CaseStatusChart distribution={stats.statusDistribution} includeZeros />
@@ -579,4 +594,70 @@ function now(_language: 'ar' | 'en' | string) {
   return new Date().toLocaleDateString('en-US', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   })
+}
+
+// ─────────────────────────────────────────────────────
+// Export bar — three Excel exports (open, closed, appointments).
+// Lives in the dashboard header. Visual style matches the small
+// outline-button pattern used elsewhere in the dashboard so the
+// existing layout/design is unaffected.
+// ─────────────────────────────────────────────────────
+function ExportBar({ isAr }: { isAr: boolean }) {
+  const [busy, setBusy] = useState<null | 'open' | 'closed' | 'appt'>(null)
+
+  const run = async (
+    kind: 'open' | 'closed' | 'appt',
+    fn: () => Promise<void>,
+    successMsg: string,
+  ) => {
+    if (busy) return
+    setBusy(kind)
+    try {
+      await fn()
+      toast.success(successMsg)
+    } catch (e: any) {
+      console.error('[dashboard/export] failed', kind, e)
+      toast.error(isAr ? 'تعذر تصدير الملف' : 'Export failed')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const btn =
+    'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border ' +
+    'border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 ' +
+    'text-gray-700 dark:text-gray-200 hover:border-red-400 hover:text-red-600 ' +
+    'disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <button
+        type="button"
+        disabled={busy !== null}
+        onClick={() => run('open', exportOpenCasesExcel, isAr ? 'تم تصدير الحالات المفتوحة' : 'Open cases exported')}
+        className={btn}
+      >
+        {busy === 'open' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+        {isAr ? 'تصدير الحالات المفتوحة' : 'Export Open Cases'}
+      </button>
+      <button
+        type="button"
+        disabled={busy !== null}
+        onClick={() => run('closed', exportClosedCasesExcel, isAr ? 'تم تصدير الحالات المغلقة' : 'Closed cases exported')}
+        className={btn}
+      >
+        {busy === 'closed' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+        {isAr ? 'تصدير الحالات المغلقة' : 'Export Closed Cases'}
+      </button>
+      <button
+        type="button"
+        disabled={busy !== null}
+        onClick={() => run('appt', exportAppointmentsExcel, isAr ? 'تم تصدير المواعيد' : 'Appointments exported')}
+        className={btn}
+      >
+        {busy === 'appt' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+        {isAr ? 'تصدير المواعيد' : 'Export Appointments'}
+      </button>
+    </div>
+  )
 }
