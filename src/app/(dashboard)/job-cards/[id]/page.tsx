@@ -19,14 +19,17 @@ import {
 
 import { useTranslation } from '@/hooks/useTranslation'
 import { createClient } from '@/lib/supabase/client'
-import { getCase } from '@/lib/cases/queries'
+import { getCase, updateExpectedCompletionDate } from '@/lib/cases/queries'
 import type { CaseRow } from '@/lib/cases/types'
 import { isClosedStatus } from '@/lib/cases/types'
 import { STATUS_COLOR } from '@/lib/cases/statuses'
-import { fmtDateTime } from '@/lib/cases/formatCase'
+import { daysUntil, fmtDate, fmtDateTime } from '@/lib/cases/formatCase'
+import { toast } from '@/components/ui/Toast'
+import { AlertTriangle, Check, Pencil, X } from 'lucide-react'
 
-import CaseUpdateForm from '@/components/cases/CaseUpdateForm'
-import CaseTimeline   from '@/components/cases/CaseTimeline'
+import CaseUpdateForm        from '@/components/cases/CaseUpdateForm'
+import CaseTimeline          from '@/components/cases/CaseTimeline'
+import AssignReplacementCard from '@/components/cases/AssignReplacementCard'
 
 interface ReplacementVehicle {
   id: string
@@ -219,6 +222,11 @@ export default function CaseDetailPage() {
         {/* Timing */}
         <InfoBlock title={isAr ? 'التواريخ' : 'Timing'} icon={<Calendar className="w-4 h-4" />}>
           <Row k={isAr ? 'تاريخ الاستلام' : 'Received'} v={fmtDateTime(c.received_at)} />
+          <ExpectedDateRow
+            caseRow={c}
+            isAr={isAr}
+            onSaved={reload}
+          />
           <Row k={isAr ? 'تاريخ الإغلاق' : 'Completed'} v={fmtDateTime(c.completed_at)} />
           <Row k={isAr ? 'تاريخ التسليم' : 'Delivered'} v={fmtDateTime(c.delivered_at)} />
           <Row k={isAr ? 'آخر تحديث' : 'Last update'} v={fmtDateTime(c.last_updated_at)} />
@@ -237,8 +245,16 @@ export default function CaseDetailPage() {
               <Row k={isAr ? 'اللوحة' : 'Plate'} v={alt.plate_number ?? '—'} />
               <Row k={isAr ? 'المركبة' : 'Model'} v={[alt.brand, alt.model].filter(Boolean).join(' ') || '—'} />
             </>
-          ) : (
+          ) : closed ? (
+            // Closed cases stay read-only as historical data — no assign button.
             <p className="text-xs text-gray-500">{isAr ? 'لا توجد مركبة بديلة مرتبطة' : 'No replacement linked'}</p>
+          ) : (
+            <AssignReplacementCard
+              caseId={c.id}
+              mainVehicleId={c.vehicle_id}
+              isAr={isAr}
+              onAssigned={reload}
+            />
           )}
         </InfoBlock>
 
@@ -298,6 +314,117 @@ function Row({ k, v }: { k: string; v: string }) {
     <div className="flex items-start gap-3 text-xs">
       <span className="text-gray-500 min-w-[90px]">{k}</span>
       <span className="text-gray-800 dark:text-gray-200 font-mono break-all">{v}</span>
+    </div>
+  )
+}
+
+/**
+ * Inline-editable row for `expected_completion_date`. Sits inside the
+ * Timing block on the case detail page. The status of the case is NOT
+ * touched — the workshop can extend the deadline freely without forcing
+ * a closure or any other workflow change.
+ *
+ * For closed cases the row renders read-only: the planned date is shown
+ * as historical context but the pencil/edit affordance is hidden.
+ */
+function ExpectedDateRow({
+  caseRow, isAr, onSaved,
+}: {
+  caseRow: CaseRow
+  isAr: boolean
+  onSaved: () => void | Promise<void>
+}) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState<string>(caseRow.expected_completion_date ?? '')
+  const [saving, setSaving] = useState(false)
+
+  const isClosed = isClosedStatus(caseRow.status)
+  const remain = isClosed ? null : daysUntil(caseRow.expected_completion_date)
+  const overdue = remain !== null && remain < 0
+  const nearDue = remain !== null && remain >= 0 && remain <= 1
+  const minDate = caseRow.received_at ? caseRow.received_at.slice(0, 10) : undefined
+  const label = isAr ? 'متوقع الانتهاء' : 'Expected'
+
+  const submit = async () => {
+    if (saving) return
+    setSaving(true)
+    const res = await updateExpectedCompletionDate(caseRow.id, value || null)
+    setSaving(false)
+    if (!res.ok) {
+      toast.error(isAr ? 'تعذر تحديث التاريخ' : 'Failed to update date')
+      return
+    }
+    toast.success(isAr ? 'تم تحديث التاريخ المتوقع' : 'Expected date updated')
+    setEditing(false)
+    void onSaved()
+  }
+
+  return (
+    <div className="flex items-start gap-3 text-xs">
+      <span className="text-gray-500 min-w-[90px]">{label}</span>
+      {editing ? (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <input
+            type="date"
+            value={value}
+            min={minDate}
+            onChange={(e) => setValue(e.target.value)}
+            className="px-2 py-1 text-xs border border-gray-300 dark:border-slate-700 rounded bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
+          />
+          <button
+            type="button"
+            onClick={submit}
+            disabled={saving}
+            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+          >
+            <Check className="w-3 h-3" />
+            {isAr ? 'حفظ' : 'Save'}
+          </button>
+          <button
+            type="button"
+            onClick={() => { setEditing(false); setValue(caseRow.expected_completion_date ?? '') }}
+            disabled={saving}
+            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-slate-700 disabled:opacity-50"
+          >
+            <X className="w-3 h-3" />
+            {isAr ? 'إلغاء' : 'Cancel'}
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 flex-wrap text-gray-800 dark:text-gray-200">
+          <span className="font-mono">
+            {caseRow.expected_completion_date ? fmtDate(caseRow.expected_completion_date) : '—'}
+          </span>
+          {overdue && remain !== null && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-600 text-white text-[10px] font-bold">
+              <AlertTriangle className="w-3 h-3" />
+              {isAr ? `متأخرة ${Math.abs(remain)} يوم` : `Overdue ${Math.abs(remain)}d`}
+            </span>
+          )}
+          {nearDue && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-500 text-white text-[10px] font-bold">
+              <AlertTriangle className="w-3 h-3" />
+              {isAr ? 'قرب انتهاء الوقت المتوقع' : 'Near due'}
+            </span>
+          )}
+          {!overdue && !nearDue && remain !== null && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-[10px] font-medium">
+              {isAr ? `باقي: ${remain} ${remain === 1 ? 'يوم' : 'أيام'}` : `${remain}d left`}
+            </span>
+          )}
+          {!isClosed && (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              title={isAr ? 'تعديل التاريخ المتوقع' : 'Edit expected date'}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-800 text-[11px]"
+            >
+              <Pencil className="w-3 h-3" />
+              {isAr ? 'تعديل' : 'Edit'}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }

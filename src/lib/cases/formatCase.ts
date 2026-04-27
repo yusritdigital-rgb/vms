@@ -45,3 +45,70 @@ export function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return '—'
   try { return format(new Date(iso), 'yyyy-MM-dd HH:mm') } catch { return '—' }
 }
+
+/**
+ * True iff `expected` (YYYY-MM-DD or any parseable date) is strictly before
+ * today (local). Used to flag open cases that have passed their planned
+ * completion date as "متأخرة".
+ */
+export function isOverdue(expected: string | null | undefined): boolean {
+  const d = daysUntil(expected)
+  return d !== null && d < 0
+}
+
+/**
+ * Calendar-day delta between today and `expected` (positive = days remaining,
+ * 0 = due today, negative = overdue). Returns null if the input is missing
+ * or unparseable. Day boundary is local midnight, so a case with expected
+ * date == today shows "باقي: 0 أيام" (still on time) until tomorrow.
+ */
+export function daysUntil(expected: string | null | undefined): number | null {
+  if (!expected) return null
+  const t = new Date(expected).getTime()
+  if (!Number.isFinite(t)) return null
+  const exp = new Date(t); exp.setHours(0, 0, 0, 0)
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  return Math.round((exp.getTime() - today.getTime()) / MS_DAY)
+}
+
+/**
+ * Compact label for an expected-completion date, designed to be appended
+ * inline next to an existing date in the daily-update list. Returns one of:
+ *
+ *   • `متوقع الانتهاء: بعد N أيام` / `متوقع الانتهاء: اليوم` / `متوقع الانتهاء: غدًا`
+ *   • `قرب انتهاء الوقت المتوقع`            (when 0 ≤ remain ≤ 1)
+ *   • `متأخرة: N يوم`                        (when remain < 0)
+ *
+ * The `tone` field tells the caller which subtle colour to use; no badges,
+ * borders, icons, or layout chrome are emitted. Returns null if the date
+ * is missing.
+ */
+export type ExpectedDueTone = 'normal' | 'near' | 'overdue'
+export interface ExpectedDueLabel {
+  text: string
+  tone: ExpectedDueTone
+}
+export function expectedDueLabel(
+  expected: string | null | undefined,
+  isAr: boolean,
+): ExpectedDueLabel | null {
+  const remain = daysUntil(expected)
+  if (remain === null) return null
+  if (remain < 0) {
+    const n = Math.abs(remain)
+    return {
+      tone: 'overdue',
+      text: isAr ? `متأخرة: ${n} يوم` : `Overdue: ${n}d`,
+    }
+  }
+  if (remain <= 1) {
+    return {
+      tone: 'near',
+      text: isAr ? 'قرب انتهاء الوقت المتوقع' : 'Near due date',
+    }
+  }
+  return {
+    tone: 'normal',
+    text: isAr ? `متوقع الانتهاء: بعد ${remain} أيام` : `Expected: in ${remain}d`,
+  }
+}

@@ -70,6 +70,53 @@ export function notifyLowStock(companyId: string, partNameAr: string, partNameEn
   })
 }
 
+/**
+ * Fired when an open case is within 1 day of its expected completion
+ * date. Deduplicated server-side by (company_id, type, reference_id)
+ * over a 24h window — see `/api/notifications` POST handler — so it's
+ * safe to call this on every dashboard load without spamming.
+ */
+export function notifyCaseNearDue(
+  companyId: string,
+  jobCardNumber: string,
+  plateNumber: string,
+  expectedDate: string,
+  jobCardId: string,
+) {
+  return sendNotification({
+    company_id: companyId,
+    type: 'case_near_due',
+    title_ar: `قرب انتهاء الوقت المتوقع #${jobCardNumber}`,
+    title_en: `Case nearing due date #${jobCardNumber}`,
+    body_ar: `الحالة ${plateNumber} يتبقى لها يوم أو أقل (متوقع ${expectedDate})`,
+    body_en: `Case for ${plateNumber} is due within 1 day (expected ${expectedDate})`,
+    reference_id: jobCardId,
+  })
+}
+
+/**
+ * Fired when an open case is past its expected completion date.
+ * Distinct `type` from the legacy days-in-shop `vehicle_overdue`
+ * notification so the two can coexist without dedup collisions.
+ */
+export function notifyCaseOverdueByExpected(
+  companyId: string,
+  jobCardNumber: string,
+  plateNumber: string,
+  daysLate: number,
+  jobCardId: string,
+) {
+  return sendNotification({
+    company_id: companyId,
+    type: 'case_overdue',
+    title_ar: `تجاوز الوقت المتوقع #${jobCardNumber}`,
+    title_en: `Case overdue #${jobCardNumber}`,
+    body_ar: `الحالة ${plateNumber} متأخرة ${daysLate} يوم عن الوقت المتوقع`,
+    body_en: `Case for ${plateNumber} is ${daysLate} days past expected completion`,
+    reference_id: jobCardId,
+  })
+}
+
 export function notifyVehicleReceived(companyId: string, plateNumber: string, jobCardNumber: string, jobCardId: string) {
   return sendNotification({
     company_id: companyId,

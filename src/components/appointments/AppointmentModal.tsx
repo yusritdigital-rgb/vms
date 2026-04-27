@@ -4,16 +4,20 @@
 // AppointmentModal — enhanced creation/edit UX.
 // Sections:
 //   1) Customer
-//   2) Vehicle (DB-backed)  + mileage + complaint
+//   2) Vehicle (DB-backed)  + complaint
 //   3) تحديد الموعد  (Calendar + Time-slots + live summary)
 //   4) Notes
 //   Footer: إلغاء  ·  حفظ الموعد  (disabled until required fields set)
+//
+// NOTE: Vehicle odometer was removed in migration 022 — the canonical
+// reading is now captured at case creation time (vehicle_odometer_readings
+// table). Appointments no longer carry a mileage field.
 // =====================================================
 
 import { useEffect, useMemo, useState } from 'react'
 import {
   X, User, Phone, Mail, Car, ClipboardList, StickyNote,
-  CalendarDays, Loader2, Save, Gauge, CheckCircle2,
+  CalendarDays, Loader2, Save, CheckCircle2,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import SearchableSelect, { type SearchableOption } from '@/components/ui/SearchableSelect'
@@ -39,7 +43,6 @@ interface Vehicle {
   brand: string | null
   manufacturer?: string | null
   model: string | null
-  current_odometer?: number | null
 }
 
 interface Props {
@@ -56,7 +59,6 @@ export default function AppointmentModal({ open, onClose, onSaved, existing }: P
   const [customerPhone, setCustomerPhone] = useState('')
   const [customerEmail, setCustomerEmail] = useState('')
   const [vehicleId, setVehicleId]         = useState('')
-  const [mileage, setMileage]             = useState<number | ''>('')
   const [complaint, setComplaint]         = useState('')
   const [notes, setNotes]                 = useState('')
   const [aptType, setAptType]             = useState<AppointmentType>('maintenance')
@@ -82,7 +84,6 @@ export default function AppointmentModal({ open, onClose, onSaved, existing }: P
       setCustomerPhone(existing.customer_phone ?? '')
       setCustomerEmail(existing.customer_email ?? '')
       setVehicleId(existing.vehicle_id ?? '')
-      setMileage(existing.mileage ?? '')
       setComplaint(existing.complaint ?? '')
       setNotes(existing.notes ?? '')
       setAptType((existing.appointment_type as AppointmentType) ?? 'maintenance')
@@ -93,7 +94,6 @@ export default function AppointmentModal({ open, onClose, onSaved, existing }: P
       setCustomerPhone('')
       setCustomerEmail('')
       setVehicleId('')
-      setMileage('')
       setComplaint('')
       setNotes('')
       setAptType('maintenance')
@@ -117,7 +117,7 @@ export default function AppointmentModal({ open, onClose, onSaved, existing }: P
       for (let p = 0; p < 50; p++) {
         const { data, error } = await supabase
           .from('vehicles')
-          .select('id, plate_number, plate_number_ar, chassis_number, brand, manufacturer, model, current_odometer')
+          .select('id, plate_number, plate_number_ar, chassis_number, brand, manufacturer, model')
           .order('plate_number')
           .range(from, from + PAGE - 1)
         if (error || !data) break
@@ -189,15 +189,6 @@ export default function AppointmentModal({ open, onClose, onSaved, existing }: P
     [vehicles]
   )
 
-  // Auto-prefill mileage when selecting a vehicle with a known odometer
-  // (only if the user hasn't typed one yet and we're not editing).
-  useEffect(() => {
-    if (!selectedVehicle || mileage !== '' || existing) return
-    if (typeof selectedVehicle.current_odometer === 'number') {
-      setMileage(selectedVehicle.current_odometer)
-    }
-  }, [selectedVehicle, mileage, existing])
-
   const canSave = Boolean(customerName.trim() && date && time)
   const summary = formatAppointmentSummaryAr(date, time)
 
@@ -241,7 +232,6 @@ export default function AppointmentModal({ open, onClose, onSaved, existing }: P
         ? [selectedVehicle.brand || selectedVehicle.manufacturer, selectedVehicle.model]
             .filter(Boolean).join(' ').trim() || null
         : null,
-      mileage: mileage === '' ? null : Number(mileage),
       complaint: complaint.trim() || null,
       notes: notes.trim() || null,
       appointment_type: aptType,
@@ -493,33 +483,18 @@ export default function AppointmentModal({ open, onClose, onSaved, existing }: P
               </div>
             )}
 
-            {/* Mileage + complaint */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-              <div>
-                <label className={labelCls}>عداد السيارة</label>
-                <div className="relative">
-                  <Gauge className="absolute top-1/2 -translate-y-1/2 start-3 w-4 h-4 text-gray-400" />
-                  <input
-                    type="number" min={0}
-                    value={mileage}
-                    onChange={(e) => setMileage(e.target.value === '' ? '' : Number(e.target.value))}
-                    placeholder="0"
-                    className={`${inputCls} ps-9`}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className={labelCls}>شكوى / وصف المشكلة</label>
-                <div className="relative">
-                  <ClipboardList className="absolute top-2.5 start-3 w-4 h-4 text-gray-400" />
-                  <textarea
-                    rows={2}
-                    value={complaint}
-                    onChange={(e) => setComplaint(e.target.value)}
-                    placeholder="مثال: صوت غريب من المحرك..."
-                    className={`${inputCls} ps-9 resize-y`}
-                  />
-                </div>
+            {/* Complaint — odometer field removed; reading is captured at case creation */}
+            <div className="mt-3">
+              <label className={labelCls}>شكوى / وصف المشكلة</label>
+              <div className="relative">
+                <ClipboardList className="absolute top-2.5 start-3 w-4 h-4 text-gray-400" />
+                <textarea
+                  rows={2}
+                  value={complaint}
+                  onChange={(e) => setComplaint(e.target.value)}
+                  placeholder="مثال: صوت غريب من المحرك..."
+                  className={`${inputCls} ps-9 resize-y`}
+                />
               </div>
             </div>
           </section>

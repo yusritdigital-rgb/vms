@@ -35,7 +35,11 @@ import { useTranslation } from '@/hooks/useTranslation'
 import { useCompanyId } from '@/hooks/useCompany'
 import { createClient } from '@/lib/supabase/client'
 import { CASE_STATUSES, STATUS_COLOR, isCaseClosed } from '@/lib/cases/statuses'
-import { notifyVehicleOverdue } from '@/lib/notifications/trigger'
+import {
+  notifyVehicleOverdue,
+  notifyCaseNearDue,
+  notifyCaseOverdueByExpected,
+} from '@/lib/notifications/trigger'
 import {
   exportOpenCasesExcel,
   exportClosedCasesExcel,
@@ -93,9 +97,11 @@ interface RawCase {
   vehicle_id: string
   status: string
   received_at: string | null
+  expected_completion_date?: string | null
   completed_at?: string | null
   delivered_at?: string | null
   created_at: string
+  vehicle?: { plate_number: string | null } | null
 }
 
 // ─────────────────────────────────────────────────────
@@ -160,7 +166,7 @@ export default function DashboardPage() {
       // Selects + counts, fired in parallel
       const casesQuery = supabase
         .from('job_cards')
-        .select('id, vehicle_id, status, received_at, completed_at, delivered_at, created_at, job_card_number')
+        .select('id, vehicle_id, status, received_at, expected_completion_date, completed_at, delivered_at, created_at, job_card_number, vehicle:vehicles!job_cards_vehicle_id_fkey(plate_number)')
       const vehiclesLiteQuery = supabase
         .from('vehicles')
         .select('id, project_code')
@@ -280,17 +286,40 @@ export default function DashboardPage() {
       })
       setLastUpdated(new Date())
 
-      // Side-effect: push overdue notifications for cases we just discovered
-      // as overdue (only on first load to avoid spamming).
+      // Side-effect: push notifications. Only on first load (silent=false) to
+      // avoid duplicate-but-allowed pings every 30s; the API also dedups by
+      // (company_id, type, reference_id) over 24h so this is layered defence.
       if (!silent && companyId) {
+        // Days-in-shop > 3 days (legacy `vehicle_overdue` channel).
         cases
           .filter(c => !isClosed(c.status) && c.received_at &&
                        now.getTime() - new Date(c.received_at).getTime() > threeDaysMs)
-          .forEach(async (c) => {
+          .forEach((c) => {
             const days = Math.floor((now.getTime() - new Date(c.received_at!).getTime()) / (24 * 60 * 60 * 1000))
-            // Best-effort plate lookup — the light cases query doesn't include the vehicle join.
-            notifyVehicleOverdue(companyId, c.vehicle_id, days, c.id)
+            const plate = c.vehicle?.plate_number ?? c.vehicle_id
+            notifyVehicleOverdue(companyId, plate, days, c.id)
           })
+
+        // Expected-completion-date notifications. Two channels — one for
+        // "near due" (within 1 day, including today) and one for "overdue"
+        // (expected < today). Both keyed by case id so the API dedups them
+        // to once per 24h per case.
+        const today0 = new Date(now); today0.setHours(0, 0, 0, 0)
+        const MS_DAY = 24 * 60 * 60 * 1000
+        cases.forEach((c) => {
+          if (isClosed(c.status)) return
+          if (!c.expected_completion_date) return
+          const exp = new Date(c.expected_completion_date)
+          if (!Number.isFinite(exp.getTime())) return
+          exp.setHours(0, 0, 0, 0)
+          const delta = Math.round((exp.getTime() - today0.getTime()) / MS_DAY)
+          const plate = c.vehicle?.plate_number ?? c.vehicle_id
+          if (delta < 0) {
+            notifyCaseOverdueByExpected(companyId, c.job_card_number, plate, Math.abs(delta), c.id)
+          } else if (delta <= 1) {
+            notifyCaseNearDue(companyId, c.job_card_number, plate, c.expected_completion_date!, c.id)
+          }
+        })
       }
     } catch (e) {
       console.error('[dashboard] load failed', e)

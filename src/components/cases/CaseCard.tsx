@@ -1,16 +1,18 @@
 'use client'
 
 // =====================================================
-// CaseCard — rich card for an open case in the Daily Update.
-// Shows: case #, plate, project, status, days in shop,
-//        last update, inline update form.
+// CaseCard — compact card for an open case in the Daily Update.
+// Shows: case #, plate, project, days in shop, last update,
+//        and a single inline expected-completion label appended
+//        next to the days-in-shop chip. Expected date is
+//        edited from the case detail page (kept light here).
 // =====================================================
 
 import Link from 'next/link'
 import { Briefcase, Car, Clock, ExternalLink, Sparkles } from 'lucide-react'
 import type { CaseRow } from '@/lib/cases/types'
 import { STATUS_COLOR } from '@/lib/cases/statuses'
-import { daysSince, relativeTime } from '@/lib/cases/formatCase'
+import { daysSince, expectedDueLabel, relativeTime } from '@/lib/cases/formatCase'
 import CaseUpdateForm from './CaseUpdateForm'
 
 interface Props {
@@ -26,6 +28,11 @@ export default function CaseCard({ c, isAr, highlight, onSaved }: Props) {
 
   const days = daysSince(c.received_at)
   const last = relativeTime(c.last_updated_at, isAr)
+  const due  = expectedDueLabel(c.expected_completion_date, isAr)
+  const dueClass =
+    due?.tone === 'overdue' ? 'text-red-600 dark:text-red-400 font-semibold'
+    : due?.tone === 'near'  ? 'text-orange-600 dark:text-orange-400 font-semibold'
+    :                         'text-gray-500 dark:text-gray-400'
 
   return (
     <div
@@ -54,7 +61,7 @@ export default function CaseCard({ c, isAr, highlight, onSaved }: Props) {
             </span>
           </p>
 
-          {/* Meta chips: project · days · last update */}
+          {/* Meta chips: project · days · expected (inline) · last update */}
           <div className="flex flex-wrap items-center gap-1.5 mt-2">
             {c.vehicle?.project_code && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px]">
@@ -73,6 +80,12 @@ export default function CaseCard({ c, isAr, highlight, onSaved }: Props) {
               >
                 <Clock className="w-3 h-3" />
                 {isAr ? `${days} يوم في الورشة` : `${days}d in shop`}
+                {due && (
+                  <>
+                    <span className="text-gray-300 dark:text-gray-600">|</span>
+                    <span className={dueClass}>{due.text}</span>
+                  </>
+                )}
               </span>
             )}
             {last && (

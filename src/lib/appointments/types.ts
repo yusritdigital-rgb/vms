@@ -57,7 +57,6 @@ export interface Appointment {
   vehicle_id: string | null
   vehicle_plate: string | null
   vehicle_label: string | null
-  mileage: number | null
   complaint: string | null
   notes: string | null
   scheduled_date: string    // YYYY-MM-DD

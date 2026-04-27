@@ -15,6 +15,7 @@ export interface CaseRow {
   status: string
   closure_type: string | null
   received_at: string
+  expected_completion_date: string | null  // YYYY-MM-DD (DATE column)
   completed_at: string | null
   delivered_at: string | null
   workshop_id: string | null

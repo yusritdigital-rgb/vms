@@ -31,8 +31,8 @@ import {
 import { useTranslation } from '@/hooks/useTranslation'
 import { useCasesStream } from '@/lib/cases/useCasesStream'
 import { isClosedStatus } from '@/lib/cases/types'
-import { STATUS_COLOR } from '@/lib/cases/statuses'
-import { daysSince, fmtDate, relativeTime } from '@/lib/cases/formatCase'
+import { STATUS_COLOR, isCaseClosed } from '@/lib/cases/statuses'
+import { daysSince, expectedDueLabel, fmtDate, relativeTime } from '@/lib/cases/formatCase'
 
 import CaseCard from '@/components/cases/CaseCard'
 import CaseFilters, {
@@ -232,7 +232,9 @@ export default function CasesPage() {
 function ArchiveTable({ rows, isAr, highlightId, onOpen }: {
   rows: Array<{
     id: string; job_card_number: string; status: string;
-    received_at: string; completed_at: string | null; last_updated_at: string | null;
+    received_at: string;
+    expected_completion_date?: string | null;
+    completed_at: string | null; last_updated_at: string | null;
     vehicle: { plate_number: string | null; project_code: string | null; brand: string | null; model: string | null } | null
   }>
   isAr: boolean
@@ -245,6 +247,14 @@ function ArchiveTable({ rows, isAr, highlightId, onOpen }: {
         const badge = STATUS_COLOR[r.status as keyof typeof STATUS_COLOR]
           || 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
         const isNew = highlightId === r.id
+        // Expected-completion is open-only; closed rows skip the inline label.
+        const due = !isCaseClosed(r.status)
+          ? expectedDueLabel(r.expected_completion_date, isAr)
+          : null
+        const dueClass =
+          due?.tone === 'overdue' ? 'text-red-600 dark:text-red-400 font-semibold'
+          : due?.tone === 'near'  ? 'text-orange-600 dark:text-orange-400 font-semibold'
+          :                         'text-gray-500 dark:text-gray-400'
         return (
           <li
             key={r.id}
@@ -259,7 +269,15 @@ function ArchiveTable({ rows, isAr, highlightId, onOpen }: {
             </span>
             <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] ${badge}`}>{r.status}</span>
             <span className="ms-auto flex items-center gap-4 text-[11px] text-gray-400 font-mono">
-              <span title={isAr ? 'الاستلام' : 'Received'}>{fmtDate(r.received_at)}</span>
+              <span title={isAr ? 'الاستلام' : 'Received'}>
+                {fmtDate(r.received_at)}
+                {due && (
+                  <>
+                    <span className="text-gray-300 dark:text-gray-600 mx-1.5">|</span>
+                    <span className={dueClass}>{due.text}</span>
+                  </>
+                )}
+              </span>
               <span title={isAr ? 'في الورشة' : 'In shop'}>{(daysSince(r.received_at) ?? 0)}d</span>
               <span title={isAr ? 'آخر تحديث' : 'Last update'}>{relativeTime(r.last_updated_at, isAr) ?? '—'}</span>
             </span>

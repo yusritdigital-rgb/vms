@@ -64,10 +64,18 @@ export default function CreateCasePage() {
   const [type, setType]             = useState<'accident' | 'mechanical'>('mechanical')
   const [workshopId, setWorkshopId] = useState('')
   const [entryOdo, setEntryOdo]     = useState<string>('')
+  // Odometer of the replacement vehicle at handover. Required when a
+  // replacement is assigned; persisted as a `vehicle_odometer_readings`
+  // row alongside the main vehicle's reading.
+  const [altEntryOdo, setAltEntryOdo] = useState<string>('')
   const [receivedAt, setReceivedAt] = useState(() => {
     const d = new Date(); d.setSeconds(0, 0)
     return d.toISOString().slice(0, 16) // yyyy-MM-ddTHH:mm (local)
   })
+  // Planned completion date (DATE — yyyy-MM-dd). Required by the form;
+  // saved into job_cards.expected_completion_date and used by the Daily
+  // Update list to flag overdue cases.
+  const [expectedDate, setExpectedDate] = useState<string>('')
   const [complaint, setComplaint]   = useState('')
   const [notes, setNotes]           = useState('')
   const [status, setStatus]         = useState<string>('بانتظار تقدير')
@@ -90,19 +98,36 @@ export default function CreateCasePage() {
     main: { plate: string | null; model: string | null; project: string | null; odometer: number | null }
     replacement: { plate: string | null; model: string | null; project: string | null; odometer: number | null } | null
   } | null>(null)
-  // Replacement odometer the officer enters before printing the checklist
-  // (the vehicles table value is a starting point only; the real number is
-  // read on handover).
-  const [replacementOdo, setReplacementOdo] = useState<string>('')
 
-  // Prefill odometer when a vehicle is selected (only if the user
-  // hasn't typed a value yet).
+  // Prefill odometer fields when vehicles are picked. We seed the input
+  // with the cached `current_odometer` so the user only has to type when
+  // the actual handover reading differs. The DB trigger enforces that
+  // the saved reading is >= last known.
   useEffect(() => {
     const v = vehicles.find(x => x.id === vehicleId)
     if (v && v.current_odometer != null && !entryOdo) {
       setEntryOdo(String(v.current_odometer))
     }
   }, [vehicleId, vehicles]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const v = vehicles.find(x => x.id === altVehicleId)
+    if (v && v.current_odometer != null && !altEntryOdo) {
+      setAltEntryOdo(String(v.current_odometer))
+    }
+  }, [altVehicleId, vehicles]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Last-known readings for the inline hints under each odometer input.
+  const mainVehicle = useMemo(
+    () => vehicles.find(v => v.id === vehicleId) ?? null,
+    [vehicles, vehicleId]
+  )
+  const altVehicle = useMemo(
+    () => vehicles.find(v => v.id === altVehicleId) ?? null,
+    [vehicles, altVehicleId]
+  )
+  const mainLastKnown = mainVehicle?.current_odometer ?? null
+  const altLastKnown  = altVehicle?.current_odometer ?? null
 
   // ─── Options ───
   const vehicleOptions: SearchableOption[] = useMemo(
@@ -140,8 +165,41 @@ export default function CreateCasePage() {
     if (!vehicleId)  return isAr ? 'اختر المركبة' : 'Pick a vehicle'
     if (!type)       return isAr ? 'اختر نوع الحالة' : 'Pick a case type'
     if (!receivedAt) return isAr ? 'اختر تاريخ الاستلام' : 'Pick a received date'
+    if (!expectedDate) return isAr ? 'حدد تاريخ متوقع للانتهاء' : 'Pick the expected completion date'
+    // Sanity: expected date should not be before received date.
+    if (receivedAt && expectedDate) {
+      const recDay = new Date(receivedAt); recDay.setHours(0, 0, 0, 0)
+      const expDay = new Date(expectedDate); expDay.setHours(0, 0, 0, 0)
+      if (expDay.getTime() < recDay.getTime()) {
+        return isAr ? 'تاريخ الانتهاء المتوقع قبل تاريخ الاستلام' : 'Expected date is before received date'
+      }
+    }
+    // Main vehicle odometer is required and must be >= last known reading
+    // (the DB trigger is the final guard; this catches it client-side).
+    if (entryOdo === '' || Number.isNaN(Number(entryOdo))) {
+      return isAr ? 'أدخل عداد الدخول للمركبة' : 'Enter the entry odometer'
+    }
+    if (Number(entryOdo) < 0) {
+      return isAr ? 'عداد المركبة غير صالح' : 'Odometer must be ≥ 0'
+    }
+    if (mainLastKnown != null && Number(entryOdo) < mainLastKnown) {
+      return isAr
+        ? `عداد الدخول أقل من آخر قراءة معروفة (${mainLastKnown.toLocaleString('en-US')} كم)`
+        : `Entry odometer is below last known reading (${mainLastKnown.toLocaleString('en-US')} km)`
+    }
     if (hasAlt) {
       if (!altVehicleId) return isAr ? 'اختر المركبة البديلة' : 'Pick a replacement vehicle'
+      if (altEntryOdo === '' || Number.isNaN(Number(altEntryOdo))) {
+        return isAr ? 'أدخل عداد المركبة البديلة' : 'Enter the replacement vehicle odometer'
+      }
+      if (Number(altEntryOdo) < 0) {
+        return isAr ? 'عداد البديلة غير صالح' : 'Replacement odometer must be ≥ 0'
+      }
+      if (altLastKnown != null && Number(altEntryOdo) < altLastKnown) {
+        return isAr
+          ? `عداد البديلة أقل من آخر قراءة معروفة (${altLastKnown.toLocaleString('en-US')} كم)`
+          : `Replacement odometer is below last known reading (${altLastKnown.toLocaleString('en-US')} km)`
+      }
     } else {
       if (!noAltReason) return isAr ? 'اختر سبب عدم وجود بديلة' : 'Pick a no-replacement reason'
       if (noAltReason === 'other' && !noAltReasonCustom.trim()) {
@@ -149,7 +207,7 @@ export default function CreateCasePage() {
       }
     }
     return null
-  }, [vehicleId, type, receivedAt, hasAlt, altVehicleId, noAltReason, noAltReasonCustom, isAr])
+  }, [vehicleId, type, receivedAt, expectedDate, entryOdo, mainLastKnown, hasAlt, altVehicleId, altEntryOdo, altLastKnown, noAltReason, noAltReasonCustom, isAr])
 
   const canSave = !validationError && !saving
 
@@ -173,10 +231,13 @@ export default function CreateCasePage() {
         workshop_city:           ws?.city_ar ?? null,
         entry_odometer:          Number(entryOdo) || 0,
         received_at:             new Date(receivedAt).toISOString(),
+        expected_completion_date: expectedDate || null,
         complaint_description:   complaint.trim() || null,
         internal_notes:          notes.trim() || null,
         has_replacement_vehicle: hasAlt,
         replacement_vehicle_id:  hasAlt ? (altVehicleId || null) : null,
+        replacement_entry_odometer:
+          hasAlt && altEntryOdo !== '' ? Number(altEntryOdo) : null,
         no_replacement_reason:   hasAlt ? null : (noAltReason || null),
         no_replacement_reason_custom:
           hasAlt || noAltReason !== 'other' ? null : (noAltReasonCustom.trim() || null),
@@ -209,10 +270,9 @@ export default function CreateCasePage() {
             plate:    altV?.plate_number || altV?.plate_number_ar || null,
             model:    modelLabel(altV),
             project:  projectsLabel(altV),
-            odometer: altV?.current_odometer ?? null,
+            odometer: altEntryOdo !== '' ? Number(altEntryOdo) : (altV?.current_odometer ?? null),
           },
         })
-        setReplacementOdo(altV?.current_odometer != null ? String(altV.current_odometer) : '')
         setSaving(false)
         // Scroll to top so the success card is visible.
         if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -240,7 +300,6 @@ export default function CreateCasePage() {
   // proceed to the case list.
   if (savedCase && savedCase.replacement) {
     const handlePrint = () => {
-      const odo = replacementOdo === '' ? null : Number(replacementOdo)
       generateReplacementChecklistPDF({
         caseNumber: savedCase.job_card_number,
         caseDate:   savedCase.received_at,
@@ -256,7 +315,7 @@ export default function CreateCasePage() {
           plate_number: savedCase.replacement!.plate,
           make_model:   savedCase.replacement!.model,
           project_code: savedCase.replacement!.project,
-          odometer:     odo ?? savedCase.replacement!.odometer,
+          odometer:     savedCase.replacement!.odometer,
         },
       })
     }
@@ -300,19 +359,9 @@ export default function CreateCasePage() {
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 {[savedCase.replacement.model, savedCase.replacement.project].filter(Boolean).join(' · ') || '—'}
               </p>
-              <div className="mt-2">
-                <label className="text-[11px] font-bold text-gray-500 dark:text-gray-400">
-                  {isAr ? 'عداد المركبة البديلة عند التسليم (اختياري)' : 'Replacement odometer at handover (optional)'}
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={replacementOdo}
-                  onChange={(e) => setReplacementOdo(e.target.value)}
-                  placeholder={savedCase.replacement.odometer != null ? String(savedCase.replacement.odometer) : '0'}
-                  className={`${inputCls} mt-1`}
-                />
-              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {isAr ? 'العداد:' : 'Odometer:'} {savedCase.replacement.odometer != null ? savedCase.replacement.odometer.toLocaleString('en-US') : '—'} كم
+              </p>
             </div>
           </div>
 
@@ -434,7 +483,7 @@ export default function CreateCasePage() {
               {isAr ? 'الورشة والتوقيت' : 'Workshop & Timing'}
             </h2>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>{isAr ? 'الورشة' : 'Workshop'}</label>
               <SearchableSelect
@@ -445,6 +494,27 @@ export default function CreateCasePage() {
                 searchPlaceholder={isAr ? 'ابحث بالاسم أو المدينة...' : 'Search by name/city...'}
                 dir={isAr ? 'rtl' : 'ltr'}
               />
+            </div>
+            <div>
+              <label className={labelCls}>
+                <Gauge className="w-3.5 h-3.5 inline-block -mt-0.5 me-1" />
+                {isAr ? 'عداد الدخول (كم) *' : 'Entry odometer (km) *'}
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={entryOdo}
+                onChange={(e) => setEntryOdo(e.target.value)}
+                className={inputCls}
+                required
+              />
+              <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                {mainLastKnown != null
+                  ? (isAr
+                      ? `آخر قراءة معروفة: ${mainLastKnown.toLocaleString('en-US')} كم`
+                      : `Last known: ${mainLastKnown.toLocaleString('en-US')} km`)
+                  : (isAr ? 'لا توجد قراءة سابقة' : 'No previous reading')}
+              </p>
             </div>
             <div>
               <label className={labelCls}>
@@ -461,15 +531,16 @@ export default function CreateCasePage() {
             </div>
             <div>
               <label className={labelCls}>
-                <Gauge className="w-3.5 h-3.5 inline-block -mt-0.5 me-1" />
-                {isAr ? 'عداد الدخول (كم)' : 'Entry odometer (km)'}
+                <CalendarClock className="w-3.5 h-3.5 inline-block -mt-0.5 me-1" />
+                {isAr ? 'تاريخ متوقع للانتهاء *' : 'Expected completion *'}
               </label>
               <input
-                type="number"
-                min={0}
-                value={entryOdo}
-                onChange={(e) => setEntryOdo(e.target.value)}
+                type="date"
+                value={expectedDate}
+                min={receivedAt ? receivedAt.slice(0, 10) : undefined}
+                onChange={(e) => setExpectedDate(e.target.value)}
                 className={inputCls}
+                required
               />
             </div>
           </div>
@@ -574,30 +645,55 @@ export default function CreateCasePage() {
             </div>
 
             {hasAlt ? (
-              <div>
-                <label className={labelCls}>
-                  {isAr ? 'اختر المركبة البديلة *' : 'Pick replacement vehicle *'}
-                  <span className="ms-2 text-[11px] font-normal text-gray-400">
-                    {isAr ? '(من مخزون RV)' : '(from the RV pool)'}
-                  </span>
-                </label>
-                {altVehicleOptions.length === 0 ? (
-                  <p className="text-xs text-amber-600 dark:text-amber-400">
-                    {isAr
-                      ? 'لا توجد مركبات بديلة متاحة في مخزون RV.'
-                      : 'No replacement vehicles available in the RV pool.'}
-                  </p>
-                ) : (
-                  <SearchableSelect
-                    options={altVehicleOptions}
-                    value={altVehicleId}
-                    onChange={(v) => setAltVehicleId(v)}
-                    placeholder={isAr ? 'اختر مركبة بديلة' : 'Choose a replacement vehicle'}
-                    searchPlaceholder={isAr ? 'ابحث برقم اللوحة...' : 'Search by plate...'}
-                    dir={isAr ? 'rtl' : 'ltr'}
-                  />
+              <>
+                <div>
+                  <label className={labelCls}>
+                    {isAr ? 'اختر المركبة البديلة *' : 'Pick replacement vehicle *'}
+                    <span className="ms-2 text-[11px] font-normal text-gray-400">
+                      {isAr ? '(من مخزون RV)' : '(from the RV pool)'}
+                    </span>
+                  </label>
+                  {altVehicleOptions.length === 0 ? (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      {isAr
+                        ? 'لا توجد مركبات بديلة متاحة في مخزون RV.'
+                        : 'No replacement vehicles available in the RV pool.'}
+                    </p>
+                  ) : (
+                    <SearchableSelect
+                      options={altVehicleOptions}
+                      value={altVehicleId}
+                      onChange={(v) => setAltVehicleId(v)}
+                      placeholder={isAr ? 'اختر مركبة بديلة' : 'Choose a replacement vehicle'}
+                      searchPlaceholder={isAr ? 'ابحث برقم اللوحة...' : 'Search by plate...'}
+                      dir={isAr ? 'rtl' : 'ltr'}
+                    />
+                  )}
+                </div>
+                {altVehicleId && (
+                  <div>
+                    <label className={labelCls}>
+                      <Gauge className="w-3.5 h-3.5 inline-block -mt-0.5 me-1" />
+                      {isAr ? 'عداد البديلة عند التسليم (كم) *' : 'Replacement odometer at handover (km) *'}
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={altEntryOdo}
+                      onChange={(e) => setAltEntryOdo(e.target.value)}
+                      className={inputCls}
+                      required
+                    />
+                    <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                      {altLastKnown != null
+                        ? (isAr
+                            ? `آخر قراءة معروفة: ${altLastKnown.toLocaleString('en-US')} كم`
+                            : `Last known: ${altLastKnown.toLocaleString('en-US')} km`)
+                        : (isAr ? 'لا توجد قراءة سابقة' : 'No previous reading')}
+                    </p>
+                  </div>
                 )}
-              </div>
+              </>
             ) : (
               <>
                 <div>
