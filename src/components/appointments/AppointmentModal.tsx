@@ -296,15 +296,26 @@ export default function AppointmentModal({ open, onClose, onSaved, existing }: P
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            to:                email,
-            customer_name:     saved.customer_name,
-            appointment_type:  TYPE_LABEL_AR[(saved.appointment_type as AppointmentType) ?? 'maintenance'],
-            vehicle_plate:     saved.vehicle_plate,
-            vehicle_label:     saved.vehicle_label,
-            scheduled_date:    saved.scheduled_date,
-            scheduled_time:    time ? formatTimeLabelAr(time) : null,
-            workshop:          null,
-            summary_ar:        summary,
+            to:                  email,
+            // Reference: customers quote this when they contact the
+            // workshop. Always the canonical APT-… number.
+            appointment_number:  saved.appointment_number,
+            customer_name:       saved.customer_name,
+            // Send the raw type KEY (maintenance / inspection / …) so the
+            // server can render both Arabic and English labels in the
+            // bilingual email template.
+            appointment_type_key: (saved.appointment_type as AppointmentType) ?? 'maintenance',
+            // Kept for backwards-compat / fallback rendering.
+            appointment_type:    TYPE_LABEL_AR[(saved.appointment_type as AppointmentType) ?? 'maintenance'],
+            vehicle_plate:       saved.vehicle_plate,
+            vehicle_label:       saved.vehicle_label,
+            scheduled_date:      saved.scheduled_date,
+            // Pre-formatted Arabic time label for the AR section.
+            scheduled_time:      time ? formatTimeLabelAr(time) : null,
+            // Raw HH:MM so the server can format an English time label.
+            scheduled_time_raw:  time || null,
+            workshop:            null,
+            summary_ar:          summary,
           }),
         })
         const json = await res.json().catch(() => ({}))

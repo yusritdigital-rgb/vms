@@ -440,7 +440,7 @@ export default function DashboardPage() {
           icon={<CheckCircle className="w-5 h-5 text-rose-600 dark:text-rose-400" />}
           tint="bg-rose-100 dark:bg-rose-900/30"
           value={n(stats.appointmentsCompletedToday)}
-          label={isAr ? 'مواعيد منجزة اليوم' : 'Completed Appointments Today'}
+          label={isAr ? 'مواعيد مكتملة اليوم' : 'Completed Appointments Today'}
           href="/reserves"
         />
         <KpiCard

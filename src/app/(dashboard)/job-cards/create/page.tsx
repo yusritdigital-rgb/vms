@@ -27,7 +27,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, Loader2, Plus, Car, Wrench, Building2, ClipboardList,
-  StickyNote, Gauge, CalendarClock, Tag, Repeat, CheckCircle2, Printer,
+  StickyNote, Gauge, CalendarClock, Tag, Repeat,
 } from 'lucide-react'
 
 import { useTranslation } from '@/hooks/useTranslation'
@@ -38,7 +38,6 @@ import { createCase } from '@/lib/cases/queries'
 import { WORKSHOPS } from '@/lib/workshops/workshops'
 import { CASE_STATUSES } from '@/lib/cases/statuses'
 import { isRvProjectCode } from '@/lib/alternatives/rules'
-import { generateReplacementChecklistPDF } from '@/lib/pdf/replacementChecklist'
 
 // ─── No-replacement reasons ───────────────────────────────────────
 // DB CHECK constraint (migration 009) only accepts these exact codes;
@@ -72,10 +71,10 @@ export default function CreateCasePage() {
     const d = new Date(); d.setSeconds(0, 0)
     return d.toISOString().slice(0, 16) // yyyy-MM-ddTHH:mm (local)
   })
-  // Planned completion date (DATE — yyyy-MM-dd). Required by the form;
-  // saved into job_cards.expected_completion_date and used by the Daily
-  // Update list to flag overdue cases.
-  const [expectedDate, setExpectedDate] = useState<string>('')
+  // Expected completion date is no longer captured at create time.
+  // It is collected later — only when the operator flips the case
+  // status to one of the in-progress states (تحت الاصلاح الميكانيكي /
+  // تحت اصلاح الهيكل / تحت الدهان) via CaseUpdateForm.
   const [complaint, setComplaint]   = useState('')
   const [notes, setNotes]           = useState('')
   const [status, setStatus]         = useState<string>('بانتظار تقدير')
@@ -87,17 +86,6 @@ export default function CreateCasePage() {
   const [noAltReasonCustom, setNoAltReasonCustom] = useState<string>('')
 
   const [saving, setSaving] = useState(false)
-
-  // Post-save success state. When set + a replacement vehicle was assigned,
-  // the form is replaced by a success card with a "print checklist" action.
-  const [savedCase, setSavedCase] = useState<{
-    id: string
-    job_card_number: string
-    received_at: string
-    workshop_label: string | null
-    main: { plate: string | null; model: string | null; project: string | null; odometer: number | null }
-    replacement: { plate: string | null; model: string | null; project: string | null; odometer: number | null } | null
-  } | null>(null)
 
   // Prefill odometer fields when vehicles are picked. We seed the input
   // with the cached `current_odometer` so the user only has to type when
@@ -165,15 +153,6 @@ export default function CreateCasePage() {
     if (!vehicleId)  return isAr ? 'اختر المركبة' : 'Pick a vehicle'
     if (!type)       return isAr ? 'اختر نوع الحالة' : 'Pick a case type'
     if (!receivedAt) return isAr ? 'اختر تاريخ الاستلام' : 'Pick a received date'
-    if (!expectedDate) return isAr ? 'حدد تاريخ متوقع للانتهاء' : 'Pick the expected completion date'
-    // Sanity: expected date should not be before received date.
-    if (receivedAt && expectedDate) {
-      const recDay = new Date(receivedAt); recDay.setHours(0, 0, 0, 0)
-      const expDay = new Date(expectedDate); expDay.setHours(0, 0, 0, 0)
-      if (expDay.getTime() < recDay.getTime()) {
-        return isAr ? 'تاريخ الانتهاء المتوقع قبل تاريخ الاستلام' : 'Expected date is before received date'
-      }
-    }
     // Main vehicle odometer is required and must be >= last known reading
     // (the DB trigger is the final guard; this catches it client-side).
     if (entryOdo === '' || Number.isNaN(Number(entryOdo))) {
@@ -207,7 +186,7 @@ export default function CreateCasePage() {
       }
     }
     return null
-  }, [vehicleId, type, receivedAt, expectedDate, entryOdo, mainLastKnown, hasAlt, altVehicleId, altEntryOdo, altLastKnown, noAltReason, noAltReasonCustom, isAr])
+  }, [vehicleId, type, receivedAt, entryOdo, mainLastKnown, hasAlt, altVehicleId, altEntryOdo, altLastKnown, noAltReason, noAltReasonCustom, isAr])
 
   const canSave = !validationError && !saving
 
@@ -231,7 +210,9 @@ export default function CreateCasePage() {
         workshop_city:           ws?.city_ar ?? null,
         entry_odometer:          Number(entryOdo) || 0,
         received_at:             new Date(receivedAt).toISOString(),
-        expected_completion_date: expectedDate || null,
+        // Expected completion is no longer set at creation — captured
+        // later by the case-update form when status flips to in-progress.
+        expected_completion_date: null,
         complaint_description:   complaint.trim() || null,
         internal_notes:          notes.trim() || null,
         has_replacement_vehicle: hasAlt,
@@ -245,40 +226,6 @@ export default function CreateCasePage() {
 
       toast.success(isAr ? `تم إنشاء الحالة ${row.job_card_number}` : `Case ${row.job_card_number} created`)
       router.refresh()
-
-      // If a replacement vehicle was assigned, show the post-save success
-      // card so the officer can print the handover checklist before leaving.
-      if (hasAlt && altVehicleId) {
-        const mainV = vehicles.find(v => v.id === vehicleId) || null
-        const altV  = vehicles.find(v => v.id === altVehicleId) || null
-        const projectsLabel = (v: VehicleLite | null) => v?.project_code ?? null
-        const modelLabel = (v: VehicleLite | null) =>
-          v ? [v.brand || v.manufacturer, v.model].filter(Boolean).join(' ') || null : null
-
-        setSavedCase({
-          id:               row.id,
-          job_card_number:  row.job_card_number,
-          received_at:      row.received_at,
-          workshop_label:   ws ? ws.display_label : null,
-          main: {
-            plate:    mainV?.plate_number || mainV?.plate_number_ar || null,
-            model:    modelLabel(mainV),
-            project:  projectsLabel(mainV),
-            odometer: Number(entryOdo) || mainV?.current_odometer || null,
-          },
-          replacement: {
-            plate:    altV?.plate_number || altV?.plate_number_ar || null,
-            model:    modelLabel(altV),
-            project:  projectsLabel(altV),
-            odometer: altEntryOdo !== '' ? Number(altEntryOdo) : (altV?.current_odometer ?? null),
-          },
-        })
-        setSaving(false)
-        // Scroll to top so the success card is visible.
-        if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
-        return
-      }
-
       router.push(`/job-cards?new=${encodeURIComponent(row.id)}`)
     } catch (err: any) {
       console.error('[create-case] submit failed', err)
@@ -294,104 +241,6 @@ export default function CreateCasePage() {
   const sectionCls = 'bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-5 space-y-4'
   const sectionHeaderCls = 'flex items-center gap-2 mb-1'
 
-  // ─── Post-save success card ───
-  // Shown after a case with a replacement vehicle is created. The form is
-  // hidden and the officer can either print the handover checklist or
-  // proceed to the case list.
-  if (savedCase && savedCase.replacement) {
-    const handlePrint = () => {
-      generateReplacementChecklistPDF({
-        caseNumber: savedCase.job_card_number,
-        caseDate:   savedCase.received_at,
-        workshop:   savedCase.workshop_label,
-        assignedTo: null,
-        mainVehicle: {
-          plate_number: savedCase.main.plate,
-          make_model:   savedCase.main.model,
-          project_code: savedCase.main.project,
-          odometer:     savedCase.main.odometer,
-        },
-        replacementVehicle: {
-          plate_number: savedCase.replacement!.plate,
-          make_model:   savedCase.replacement!.model,
-          project_code: savedCase.replacement!.project,
-          odometer:     savedCase.replacement!.odometer,
-        },
-      })
-    }
-
-    return (
-      <div className="max-w-3xl mx-auto px-4 py-6" dir={isAr ? 'rtl' : 'ltr'}>
-        <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm">
-          <div className="flex items-center gap-3 pb-4 border-b border-gray-100 dark:border-slate-800">
-            <div className="w-11 h-11 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300 flex items-center justify-center">
-              <CheckCircle2 className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-                {isAr ? 'تم إنشاء الحالة' : 'Case created'}
-              </h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                {isAr ? 'رقم الحالة:' : 'Case number:'}{' '}
-                <span className="font-bold text-gray-800 dark:text-gray-200">{savedCase.job_card_number}</span>
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5 text-sm">
-            <div className="rounded-xl border border-gray-200 dark:border-slate-700 p-3">
-              <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1">
-                {isAr ? 'المركبة الأساسية' : 'Main vehicle'}
-              </p>
-              <p className="font-bold text-gray-900 dark:text-white">{savedCase.main.plate ?? '—'}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                {[savedCase.main.model, savedCase.main.project].filter(Boolean).join(' · ') || '—'}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {isAr ? 'العداد:' : 'Odometer:'} {savedCase.main.odometer != null ? savedCase.main.odometer.toLocaleString('en-US') : '—'} كم
-              </p>
-            </div>
-            <div className="rounded-xl border border-gray-200 dark:border-slate-700 p-3">
-              <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1">
-                {isAr ? 'المركبة البديلة' : 'Replacement vehicle'}
-              </p>
-              <p className="font-bold text-gray-900 dark:text-white">{savedCase.replacement.plate ?? '—'}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                {[savedCase.replacement.model, savedCase.replacement.project].filter(Boolean).join(' · ') || '—'}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {isAr ? 'العداد:' : 'Odometer:'} {savedCase.replacement.odometer != null ? savedCase.replacement.odometer.toLocaleString('en-US') : '—'} كم
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 mt-6 pt-4 border-t border-gray-100 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-red-600 text-white rounded-lg hover:bg-red-700"
-            >
-              <Printer className="w-4 h-4" />
-              {isAr ? 'طباعة التشيك ليست' : 'Print checklist'}
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push(`/job-cards?new=${encodeURIComponent(savedCase.id)}`)}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700"
-            >
-              {isAr ? 'متابعة إلى قائمة الحالات' : 'Continue to cases'}
-            </button>
-            <Link
-              href={`/job-cards/${savedCase.id}`}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-            >
-              {isAr ? 'فتح الحالة' : 'Open case'}
-            </Link>
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 space-y-5" dir={isAr ? 'rtl' : 'ltr'}>
@@ -525,20 +374,6 @@ export default function CreateCasePage() {
                 type="datetime-local"
                 value={receivedAt}
                 onChange={(e) => setReceivedAt(e.target.value)}
-                className={inputCls}
-                required
-              />
-            </div>
-            <div>
-              <label className={labelCls}>
-                <CalendarClock className="w-3.5 h-3.5 inline-block -mt-0.5 me-1" />
-                {isAr ? 'تاريخ متوقع للانتهاء *' : 'Expected completion *'}
-              </label>
-              <input
-                type="date"
-                value={expectedDate}
-                min={receivedAt ? receivedAt.slice(0, 10) : undefined}
-                onChange={(e) => setExpectedDate(e.target.value)}
                 className={inputCls}
                 required
               />

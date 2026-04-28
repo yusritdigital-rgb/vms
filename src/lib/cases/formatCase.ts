@@ -73,11 +73,12 @@ export function daysUntil(expected: string | null | undefined): number | null {
 
 /**
  * Compact label for an expected-completion date, designed to be appended
- * inline next to an existing date in the daily-update list. Returns one of:
+ * inline (after a `|` separator) next to an existing received-date in
+ * the open-cases list. Returns one of:
  *
- *   • `متوقع الانتهاء: بعد N أيام` / `متوقع الانتهاء: اليوم` / `متوقع الانتهاء: غدًا`
- *   • `قرب انتهاء الوقت المتوقع`            (when 0 ≤ remain ≤ 1)
- *   • `متأخرة: N يوم`                        (when remain < 0)
+ *   • `متوقع: بعد N أيام`     (when remain > 1)
+ *   • `قرب انتهاء`            (when 0 ≤ remain ≤ 1)
+ *   • `متأخرة: N يوم`         (when remain < 0)
  *
  * The `tone` field tells the caller which subtle colour to use; no badges,
  * borders, icons, or layout chrome are emitted. Returns null if the date
@@ -104,11 +105,11 @@ export function expectedDueLabel(
   if (remain <= 1) {
     return {
       tone: 'near',
-      text: isAr ? 'قرب انتهاء الوقت المتوقع' : 'Near due date',
+      text: isAr ? 'قرب انتهاء' : 'Near due',
     }
   }
   return {
     tone: 'normal',
-    text: isAr ? `متوقع الانتهاء: بعد ${remain} أيام` : `Expected: in ${remain}d`,
+    text: isAr ? `متوقع: بعد ${remain} أيام` : `Expected: in ${remain}d`,
   }
 }

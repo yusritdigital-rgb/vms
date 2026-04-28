@@ -2,10 +2,9 @@
 
 // =====================================================
 // CaseCard — compact card for an open case in the Daily Update.
-// Shows: case #, plate, project, days in shop, last update,
-//        and a single inline expected-completion label appended
-//        next to the days-in-shop chip. Expected date is
-//        edited from the case detail page (kept light here).
+// Shows: case #, plate, project, expected completion, days in shop,
+//        last update, and status badge. Expected date is edited
+//        from the case detail page (kept light here).
 // =====================================================
 
 import Link from 'next/link'
@@ -61,12 +60,17 @@ export default function CaseCard({ c, isAr, highlight, onSaved }: Props) {
             </span>
           </p>
 
-          {/* Meta chips: project · days · expected (inline) · last update */}
+          {/* Meta chips: project · expected · days · last update */}
           <div className="flex flex-wrap items-center gap-1.5 mt-2">
             {c.vehicle?.project_code && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px]">
                 <Briefcase className="w-3 h-3" />
                 {c.vehicle.project_code}
+              </span>
+            )}
+            {due && (
+              <span className={`text-[11px] ${dueClass}`}>
+                {due.text}
               </span>
             )}
             {days !== null && (
@@ -80,12 +84,6 @@ export default function CaseCard({ c, isAr, highlight, onSaved }: Props) {
               >
                 <Clock className="w-3 h-3" />
                 {isAr ? `${days} يوم في الورشة` : `${days}d in shop`}
-                {due && (
-                  <>
-                    <span className="text-gray-300 dark:text-gray-600">|</span>
-                    <span className={dueClass}>{due.text}</span>
-                  </>
-                )}
               </span>
             )}
             {last && (

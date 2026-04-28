@@ -1,14 +1,21 @@
 // =====================================================
-// Replacement-vehicle handover checklist (PDF / print)
+// Replacement-vehicle handover form (PDF / print)
 // -----------------------------------------------------
-// Two-column inspection sheet printed when a case is created with a
-// replacement vehicle. The right column (RTL) is the customer's main
-// vehicle, the left column is the replacement vehicle assigned from
-// the RV pool. Each side renders the usual identity block (plate,
-// make/model, project, odometer) followed by a manual inspection
-// checklist that the workshop officer fills in by hand at handover.
+// نموذج الاستلام والتسليم — single-page A4 form printed whenever
+// a case has a replacement vehicle linked. Re-printable from the
+// case detail page at any time (open OR closed cases).
 //
-// Built on the same `openPrintWindow` engine used by invoice.ts and
+// Layout (top → bottom, RTL):
+//   1. Brand header + Arabic/English title
+//   2. Compact meta strip (case #, date, workshop, officer)
+//   3. Two slim vehicle-identity cards side-by-side (main / replacement)
+//   4. Shared 6-row inspection checklist with two state columns
+//      (الأساسية / البديلة) so a single sheet covers both vehicles
+//   5. Top-down car outline area for handwritten damage marks
+//   6. Three-up signature strip (workshop officer / customer / manager)
+//   7. Company footer strip
+//
+// Built on the same `openPrintWindow` engine as invoice.ts and
 // misuse.ts so the look is consistent with the existing print system.
 // =====================================================
 
@@ -37,69 +44,81 @@ export interface ChecklistArgs {
   replacementVehicle: ChecklistVehicle
 }
 
-// Inspection rows used on BOTH sides (handwritten ticks at print time).
-const INSPECTION_ROWS_AR: string[] = [
-  'الإطارات الأمامية',
-  'الإطارات الخلفية',
-  'الإطار الاحتياطي والأدوات',
-  'المرايا الجانبية',
-  'الأضواء الأمامية',
-  'الأضواء الخلفية',
-  'الزجاج الأمامي / الخلفي',
-  'الصدامات (أمامي / خلفي)',
-  'حالة الدهان والجسم',
-  'البطارية ومستوى الشحن',
-  'مستوى الزيت',
-  'مستوى الوقود',
-  'المكيف',
-  'الراديو / الشاشة',
-  'المساحات',
-  'الأحزمة وداخلية المركبة',
+// Only the essential items the workshop hands over with the vehicle.
+// Each row is checked twice — once for the main vehicle (الأساسية) and
+// once for the replacement (البديلة) — so the officer fills both
+// sides on a single sheet.
+const CHECKLIST_ITEMS_AR: string[] = [
+  'عدة',
+  'إطار احتياطي',
+  'طفاية حريق',
+  'مسجل',
+  'فرش أرضية',
+  'ديكورات',
 ]
 
-function vehicleBlock(title: string, v: ChecklistVehicle): string {
+/** Compact vehicle identity card. */
+function vehicleCard(title: string, v: ChecklistVehicle): string {
   return `
-    <div class="vh">
-      <div class="vh-title">${esc(title)}</div>
-      <div class="vh-kv">
+    <div class="vcard">
+      <div class="vcard-title">${esc(title)}</div>
+      <div class="vcard-grid">
         <div class="kv"><span class="k">رقم اللوحة</span><span class="v">${esc(v.plate_number) || '—'}</span></div>
-        <div class="kv"><span class="k">الموديل</span><span class="v">${esc(v.make_model) || '—'}</span></div>
+        <div class="kv"><span class="k">نوع المركبة</span><span class="v">${esc(v.make_model) || '—'}</span></div>
         <div class="kv"><span class="k">المشروع</span><span class="v">${esc(v.project_code) || '—'}</span></div>
         <div class="kv"><span class="k">العداد (كم)</span><span class="v">${
           v.odometer != null ? esc(v.odometer.toLocaleString('en-US')) : '—'
         }</span></div>
       </div>
-
-      <table class="check">
-        <thead>
-          <tr>
-            <th class="num">#</th>
-            <th>البند</th>
-            <th class="state">سليم</th>
-            <th class="state">تالف</th>
-            <th>ملاحظات</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${INSPECTION_ROWS_AR.map((row, i) => `
-            <tr>
-              <td class="num">${i + 1}</td>
-              <td>${esc(row)}</td>
-              <td class="state"><span class="box"></span></td>
-              <td class="state"><span class="box"></span></td>
-              <td class="notes-cell"></td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-
-      <div class="vh-notes">
-        <span class="lbl">ملاحظات إضافية</span>
-        <div class="lines">
-          <span></span><span></span><span></span>
-        </div>
-      </div>
     </div>
+  `
+}
+
+/**
+ * Top-down 2D car outline for manual damage / scratch marking after
+ * printing. Pure inline SVG so it prints on any browser without
+ * external assets. Faint grey strokes so handwritten pen marks stand
+ * out clearly.
+ */
+function carDiagramSVG(): string {
+  return `
+    <svg viewBox="0 0 520 200" preserveAspectRatio="xMidYMid meet" class="car-svg" xmlns="http://www.w3.org/2000/svg">
+      <!-- Body outline -->
+      <rect x="40" y="40" width="440" height="120" rx="48" ry="48"
+            fill="none" stroke="#94a3b8" stroke-width="1.4"/>
+      <!-- Hood line -->
+      <line x1="120" y1="55" x2="120" y2="145" stroke="#cbd5e1" stroke-width="1"/>
+      <!-- Trunk line -->
+      <line x1="400" y1="55" x2="400" y2="145" stroke="#cbd5e1" stroke-width="1"/>
+      <!-- Windshield + rear glass -->
+      <path d="M 120 60 L 160 90 L 160 110 L 120 140"
+            fill="none" stroke="#cbd5e1" stroke-width="1"/>
+      <path d="M 400 60 L 360 90 L 360 110 L 400 140"
+            fill="none" stroke="#cbd5e1" stroke-width="1"/>
+      <!-- Roof / cabin sides -->
+      <line x1="160" y1="90" x2="360" y2="90" stroke="#cbd5e1" stroke-width="1"/>
+      <line x1="160" y1="110" x2="360" y2="110" stroke="#cbd5e1" stroke-width="1"/>
+      <!-- Door split lines -->
+      <line x1="225" y1="90" x2="225" y2="110" stroke="#cbd5e1" stroke-width="1"/>
+      <line x1="295" y1="90" x2="295" y2="110" stroke="#cbd5e1" stroke-width="1"/>
+      <!-- Side mirrors -->
+      <rect x="150" y="32" width="14" height="6" rx="2" fill="none" stroke="#94a3b8" stroke-width="1"/>
+      <rect x="150" y="162" width="14" height="6" rx="2" fill="none" stroke="#94a3b8" stroke-width="1"/>
+      <!-- Wheels (top view: small rectangles flush with body) -->
+      <rect x="100"  y="34"  width="22" height="10" rx="2" fill="#e2e8f0" stroke="#94a3b8" stroke-width="0.8"/>
+      <rect x="380"  y="34"  width="22" height="10" rx="2" fill="#e2e8f0" stroke="#94a3b8" stroke-width="0.8"/>
+      <rect x="100"  y="156" width="22" height="10" rx="2" fill="#e2e8f0" stroke="#94a3b8" stroke-width="0.8"/>
+      <rect x="380"  y="156" width="22" height="10" rx="2" fill="#e2e8f0" stroke="#94a3b8" stroke-width="0.8"/>
+      <!-- Direction labels (Arabic) -->
+      <text x="60"  y="105" fill="#64748b" font-size="11" font-weight="700"
+            text-anchor="middle">الأمام</text>
+      <text x="460" y="105" fill="#64748b" font-size="11" font-weight="700"
+            text-anchor="middle">الخلف</text>
+      <text x="260" y="22"  fill="#94a3b8" font-size="10"
+            text-anchor="middle">يمين</text>
+      <text x="260" y="190" fill="#94a3b8" font-size="10"
+            text-anchor="middle">يسار</text>
+    </svg>
   `
 }
 
@@ -109,117 +128,149 @@ export function generateReplacementChecklistPDF(args: ChecklistArgs): void {
 
   const html = `
     <style>
-      /* Checklist-specific styles, layered on top of PDF_STYLES. */
-      .doc-header .doc-title { font-size: 18px; }
-      .doc-header .doc-title .sub { letter-spacing: 1px; }
+      /* Tighten the global doc-header for this single-page form. */
+      .doc-header .doc-title { font-size: 17px; }
+      .doc-header .doc-title .sub { letter-spacing: 1px; font-size: 9.5px; }
 
-      .ck-grid {
+      /* ── Vehicle identity cards ───────────────────── */
+      .vcards {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 10px;
-        margin-top: 8px;
+        gap: 8px;
+        margin-top: 6px;
       }
-      .vh {
+      .vcard {
         border: 1px solid var(--line);
         border-radius: 6px;
-        padding: 0;
         background: #fff;
         overflow: hidden;
         page-break-inside: avoid;
       }
-      .vh-title {
+      .vcard-title {
         background: var(--ink);
         color: #fff;
         font-weight: 800;
-        font-size: 12px;
-        padding: 7px 10px;
+        font-size: 11px;
+        padding: 5px 9px;
         letter-spacing: 0.3px;
       }
-      .vh-kv {
+      .vcard-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 4px 8px;
-        padding: 8px 10px;
+        gap: 4px 6px;
+        padding: 6px 8px;
         background: var(--panel);
       }
-      .vh-kv .kv {
+      .vcard-grid .kv {
         display: flex;
         justify-content: space-between;
         gap: 6px;
-        padding: 4px 6px;
+        padding: 3px 6px;
         background: #fff;
         border: 1px solid var(--line);
         border-radius: 4px;
         font-size: 10.5px;
       }
-      .vh-kv .kv .k { color: var(--muted); font-weight: 600; }
-      .vh-kv .kv .v { color: var(--ink); font-weight: 700; }
+      .vcard-grid .kv .k { color: var(--muted); font-weight: 600; }
+      .vcard-grid .kv .v { color: var(--ink); font-weight: 700; }
 
-      table.check {
+      /* ── Shared inspection table ──────────────────── */
+      .section-h {
+        margin-top: 10px;
+        margin-bottom: 4px;
+        padding: 4px 8px;
+        background: var(--panel-2);
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 800;
+        color: var(--ink);
+        letter-spacing: 0.3px;
+      }
+      table.inspect {
         width: 100%;
         border-collapse: collapse;
-        font-size: 10px;
+        font-size: 11px;
+        page-break-inside: avoid;
       }
-      table.check thead th {
-        background: var(--panel-2);
+      table.inspect thead th {
+        background: var(--panel);
         color: var(--ink);
-        font-weight: 700;
-        padding: 5px 6px;
+        font-weight: 800;
+        padding: 6px 8px;
         text-align: start;
-        border-bottom: 1px solid var(--line);
+        border: 1px solid var(--line);
       }
-      table.check thead th.num   { width: 22px; text-align: center; }
-      table.check thead th.state { width: 36px; text-align: center; }
-      table.check tbody td {
-        padding: 5px 6px;
-        border-bottom: 1px solid var(--line);
+      table.inspect thead th.num   { width: 28px; text-align: center; }
+      table.inspect thead th.col   { width: 100px; text-align: center; }
+      table.inspect tbody td {
+        padding: 6px 8px;
+        border: 1px solid var(--line);
+        background: #fff;
       }
-      table.check tbody td.num   { text-align: center; color: var(--muted); width: 22px; }
-      table.check tbody td.state { text-align: center; }
-      table.check tbody td.notes-cell { min-width: 70px; }
-      table.check .box {
+      table.inspect tbody td.num   { text-align: center; color: var(--muted); }
+      table.inspect tbody td.col {
+        text-align: center;
+      }
+      .ck-cell {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .ck-cell .box {
         display: inline-block;
-        width: 12px; height: 12px;
-        border: 1.2px solid var(--ink-2);
+        width: 14px; height: 14px;
+        border: 1.4px solid var(--ink-2);
         border-radius: 2px;
         background: #fff;
       }
 
-      .vh-notes {
-        padding: 8px 10px 10px;
-        border-top: 1px solid var(--line);
+      /* ── Diagram area for handwritten damage marks ── */
+      .diagram-card {
+        margin-top: 10px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 8px 10px 6px;
+        background: #fff;
+        page-break-inside: avoid;
       }
-      .vh-notes .lbl {
-        display: block;
-        font-size: 10px;
-        font-weight: 700;
+      .diagram-card .diagram-title {
+        font-size: 11px;
+        font-weight: 800;
+        color: var(--ink);
+        margin-bottom: 4px;
+      }
+      .diagram-card .diagram-hint {
+        font-size: 9.5px;
         color: var(--muted);
         margin-bottom: 4px;
-        letter-spacing: 0.5px;
       }
-      .vh-notes .lines span {
+      .car-svg {
+        width: 100%;
+        height: 150px;
         display: block;
-        height: 14px;
-        border-bottom: 1px dashed var(--line-strong);
       }
 
-      .ck-signatures {
+      /* ── Signatures ──────────────────────────────── */
+      .sig-strip {
         display: grid;
         grid-template-columns: 1fr 1fr 1fr;
         gap: 14px;
-        margin-top: 14px;
-        padding-top: 10px;
+        margin-top: 12px;
+        padding-top: 8px;
         border-top: 1px solid var(--line);
+        page-break-inside: avoid;
       }
-      .ck-signatures .sig { text-align: center; }
-      .ck-signatures .sig .role {
+      .sig-strip .sig { text-align: center; }
+      .sig-strip .sig .role {
         font-size: 10.5px; font-weight: 800; color: var(--ink-2);
-        margin-bottom: 22px;
+        margin-bottom: 26px;
       }
-      .ck-signatures .sig .line {
+      .sig-strip .sig .line {
         border-top: 1px solid var(--line-strong);
         padding-top: 4px;
-        font-size: 10px;
+        font-size: 9.5px;
         color: var(--muted);
       }
     </style>
@@ -236,8 +287,8 @@ export function generateReplacementChecklistPDF(args: ChecklistArgs): void {
       </div>
       <div class="doc-title-box">
         <div class="doc-title">
-          نموذج تسليم مركبة بديلة
-          <span class="sub">REPLACEMENT VEHICLE HANDOVER</span>
+          نموذج الاستلام والتسليم
+          <span class="sub">VEHICLE HANDOVER &amp; RETURN FORM</span>
         </div>
       </div>
     </div>
@@ -262,14 +313,52 @@ export function generateReplacementChecklistPDF(args: ChecklistArgs): void {
       </div>
     </div>
 
-    <!-- Two-column inspection grid: right = main, left = replacement -->
-    <div class="ck-grid">
-      ${vehicleBlock('بيانات المركبة الأساسية', args.mainVehicle)}
-      ${vehicleBlock('بيانات المركبة البديلة', args.replacementVehicle)}
+    <!-- Vehicle identity cards -->
+    <div class="vcards">
+      ${vehicleCard('بيانات المركبة الأساسية', args.mainVehicle)}
+      ${vehicleCard('بيانات المركبة البديلة', args.replacementVehicle)}
+    </div>
+
+    <!-- Shared inspection checklist -->
+    <div class="section-h">بنود الاستلام والتسليم</div>
+    <table class="inspect">
+      <thead>
+        <tr>
+          <th class="num">#</th>
+          <th>البند</th>
+          <th class="col">المركبة الأساسية</th>
+          <th class="col">المركبة البديلة</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${CHECKLIST_ITEMS_AR.map((item, i) => `
+          <tr>
+            <td class="num">${i + 1}</td>
+            <td>${esc(item)}</td>
+            <td class="col">
+              <span class="ck-cell"><span class="box"></span>سليم</span>
+              &nbsp;&nbsp;
+              <span class="ck-cell"><span class="box"></span>غير متوفر</span>
+            </td>
+            <td class="col">
+              <span class="ck-cell"><span class="box"></span>سليم</span>
+              &nbsp;&nbsp;
+              <span class="ck-cell"><span class="box"></span>غير متوفر</span>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+
+    <!-- 2D car outline for manual marking -->
+    <div class="diagram-card">
+      <div class="diagram-title">مخطط المركبة — للملاحظة اليدوية</div>
+      <div class="diagram-hint">يرجى تحديد مواضع الخدوش أو الأضرار يدوياً على المخطط بعد الطباعة.</div>
+      ${carDiagramSVG()}
     </div>
 
     <!-- Signature strip -->
-    <div class="ck-signatures">
+    <div class="sig-strip">
       <div class="sig">
         <div class="role">مسؤول الورشة</div>
         <div class="line">التوقيع</div>
@@ -289,7 +378,7 @@ export function generateReplacementChecklistPDF(args: ChecklistArgs): void {
   `
 
   const title = args.caseNumber
-    ? `Replacement Checklist ${args.caseNumber}`
-    : 'Replacement Checklist'
+    ? `Handover Form ${args.caseNumber}`
+    : 'Handover Form'
   openPrintWindow(html, lang, title)
 }

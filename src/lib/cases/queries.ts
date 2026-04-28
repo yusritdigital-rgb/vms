@@ -467,17 +467,29 @@ export async function getLastOdometer(vehicleId: string): Promise<number | null>
  * Apply a case update (daily update flow).
  *
  * Order:
- *   1. INSERT into case_updates (source='manual') with denormalised user name.
- *   2. If the status actually changed, UPDATE job_cards.status (the stamp
- *      trigger handles last_updated_by/at). When the new status is closed,
- *      also clear replacement_vehicle_id and stamp completed_at in the same
- *      UPDATE so the alternative returns to the pool atomically.
+ *   1. INSERT into case_updates (source='manual') with denormalised user
+ *      name and an OPTIONAL expected_completion_date snapshot — see
+ *      migration 023. The snapshot is taken whenever the caller passes
+ *      `expectedCompletionDate`, regardless of whether the status changed.
+ *   2. If the status actually changed (or a new expected date was given),
+ *      UPDATE job_cards (the stamp trigger handles last_updated_by/at).
+ *      When the new status is closed, also clear replacement_vehicle_id
+ *      and stamp completed_at in the same UPDATE so the alternative
+ *      returns to the pool atomically.
+ *
+ * Per-spec, the case-update form REQUIRES `expectedCompletionDate` when
+ * `newStatus` is one of the in-progress states ("تحت الاصلاح الميكانيكي"
+ * / "تحت اصلاح الهيكل" / "تحت الدهان"); validation lives in the form, not
+ * here, so this function stays a pure executor.
  */
 export async function applyCaseUpdate(args: {
   caseId: string
   newStatus: string
   currentStatus: string
   note: string | null
+  /** YYYY-MM-DD, or null to skip writing. Optional — only the
+   *  in-progress statuses require it (form-side rule). */
+  expectedCompletionDate?: string | null
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -492,19 +504,37 @@ export async function applyCaseUpdate(args: {
     fullName = (pref as any)?.full_name ?? user.email ?? null
   }
 
-  const { error: insErr } = await supabase.from('case_updates').insert({
+  const updateRow: Record<string, any> = {
     case_id:         args.caseId,
     status:          args.newStatus,
     note:            args.note && args.note.trim() ? args.note.trim() : null,
     updated_by:      user?.id ?? null,
     updated_by_name: fullName,
     source:          'manual',
-  })
-  if (insErr) return { ok: false, error: insErr.message }
+  }
+  if (args.expectedCompletionDate !== undefined) {
+    updateRow.expected_completion_date = args.expectedCompletionDate
+  }
+  const { error: insErr } = await supabase.from('case_updates').insert(updateRow)
+  if (insErr) {
+    // 42703 = column does not exist (migration 023 not applied yet).
+    // Retry without the new column so existing deployments keep working.
+    if ((insErr as any).code === '42703' && 'expected_completion_date' in updateRow) {
+      const { expected_completion_date: _drop, ...legacy } = updateRow
+      const { error: retryErr } = await supabase.from('case_updates').insert(legacy)
+      if (retryErr) return { ok: false, error: retryErr.message }
+    } else {
+      return { ok: false, error: insErr.message }
+    }
+  }
 
-  if (args.newStatus !== args.currentStatus) {
-    const patch: Record<string, any> = { status: args.newStatus }
-    if (isClosedStatus(args.newStatus)) {
+  const statusChanged = args.newStatus !== args.currentStatus
+  const dateProvided  = args.expectedCompletionDate !== undefined
+  if (statusChanged || dateProvided) {
+    const patch: Record<string, any> = {}
+    if (statusChanged) patch.status = args.newStatus
+    if (dateProvided)  patch.expected_completion_date = args.expectedCompletionDate
+    if (statusChanged && isClosedStatus(args.newStatus)) {
       patch.completed_at = new Date().toISOString()
       patch.replacement_vehicle_id = null
     }

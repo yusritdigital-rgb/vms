@@ -16,9 +16,10 @@
 //   │    - project / date / status / search         │
 //   │    - each card has an inline update form      │
 //   │                                                │
-//   │  ▸ All cases (archive, secondary)             │
-//   │    - full paginated list, open by default     │
-//   └────────────────────────────────────────────────┘
+//   │  ▸ سجل الحالات المفتوحة (table, secondary)    │
+//   │    - paginated list of OPEN cases only        │
+//   │    - closed cases live in /history             │
+//   └─────────────────────────────────────────────┘
 // =====================================================
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -51,13 +52,15 @@ export default function CasesPage() {
   const [archiveOpen, setArchiveOpen] = useState(true) // user chose "expanded by default"
   const [refreshing, setRefreshing] = useState(false)
 
-  // ─── Open / archive split ──────────────────────────
-  const { openCases, archiveCases } = useMemo(() => {
-    const open: typeof cases = []
-    const arc:  typeof cases = []
-    for (const c of cases) (isClosedStatus(c.status) ? arc : open).push(c)
-    return { openCases: open, archiveCases: arc }
-  }, [cases])
+  // ─── Open-only filter ──────────────────────────────
+  // The Cases page is OPEN-cases-only by spec. Closed cases live in
+  // /history (سجل الحالات). We still receive the full stream from
+  // `useCasesStream` so closures landing in real-time are dropped from
+  // this view immediately without a refetch.
+  const openCases = useMemo(
+    () => cases.filter(c => !isClosedStatus(c.status)),
+    [cases]
+  )
 
   // Project options derived from the actual open cases in play.
   const projectOptions = useMemo(() => {
@@ -70,7 +73,12 @@ export default function CasesPage() {
   }, [openCases])
 
   const filteredOpen    = useMemo(() => applyCaseFilters(openCases, filters), [openCases, filters])
-  const filteredArchive = useMemo(() => applyCaseFilters(cases,     filters), [cases,     filters])
+  // "سجل الحالات المفتوحة" must contain ONLY open cases. Closed
+  // cases live in /history (سجل الحالات). The two sections on this
+  // page are different views of the same open-cases list: the Daily
+  // Update is card-based with inline edit; the table below is a
+  // condensed read-mostly overview.
+  const filteredArchive = useMemo(() => applyCaseFilters(openCases, filters), [openCases, filters])
 
   // Auto-scroll to the freshly-created card when arriving with ?new=<id>.
   const didScroll = useRef(false)
@@ -102,8 +110,8 @@ export default function CasesPage() {
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             {isAr
-              ? `${openCases.length} مفتوحة · ${archiveCases.length} مغلقة`
-              : `${openCases.length} open · ${archiveCases.length} closed`}
+              ? `${openCases.length} حالة مفتوحة`
+              : `${openCases.length} open cases`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -196,12 +204,12 @@ export default function CasesPage() {
             <Archive className="w-5 h-5 text-gray-500" />
             <div className="text-start">
               <div className="font-semibold text-gray-900 dark:text-white">
-                {isAr ? 'كل الحالات (أرشيف)' : 'All cases (archive)'}
+                {isAr ? 'سجل الحالات المفتوحة' : 'Open cases log'}
               </div>
               <div className="text-xs text-gray-500 dark:text-gray-400">
                 {isAr
-                  ? `${filteredArchive.length} / ${cases.length} حالة (شاملة المغلقة)`
-                  : `${filteredArchive.length} / ${cases.length} cases (incl. closed)`}
+                  ? `${filteredArchive.length} / ${openCases.length} حالة مفتوحة`
+                  : `${filteredArchive.length} / ${openCases.length} open cases`}
               </div>
             </div>
           </div>
@@ -214,7 +222,7 @@ export default function CasesPage() {
               <div className="py-10 text-center"><Loader2 className="w-6 h-6 animate-spin inline-block text-red-600" /></div>
             ) : filteredArchive.length === 0 ? (
               <div className="py-10 text-center text-sm text-gray-400">
-                {isAr ? 'لا توجد حالات' : 'No cases'}
+                {isAr ? 'لا توجد حالات مفتوحة' : 'No open cases'}
               </div>
             ) : (
               <ArchiveTable rows={filteredArchive} isAr={isAr} highlightId={highlightId} onOpen={(id) => router.push(`/job-cards/${id}`)} />
@@ -268,16 +276,9 @@ function ArchiveTable({ rows, isAr, highlightId, onOpen }: {
               {r.vehicle?.project_code ?? '—'}
             </span>
             <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] ${badge}`}>{r.status}</span>
+            {due && <span className={`text-[11px] ${dueClass}`}>{due.text}</span>}
             <span className="ms-auto flex items-center gap-4 text-[11px] text-gray-400 font-mono">
-              <span title={isAr ? 'الاستلام' : 'Received'}>
-                {fmtDate(r.received_at)}
-                {due && (
-                  <>
-                    <span className="text-gray-300 dark:text-gray-600 mx-1.5">|</span>
-                    <span className={dueClass}>{due.text}</span>
-                  </>
-                )}
-              </span>
+              <span title={isAr ? 'الاستلام' : 'Received'}>{fmtDate(r.received_at)}</span>
               <span title={isAr ? 'في الورشة' : 'In shop'}>{(daysSince(r.received_at) ?? 0)}d</span>
               <span title={isAr ? 'آخر تحديث' : 'Last update'}>{relativeTime(r.last_updated_at, isAr) ?? '—'}</span>
             </span>
