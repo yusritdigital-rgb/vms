@@ -20,7 +20,6 @@ import {
   esc,
   fmtDate,
   openPrintWindow,
-  managerSignatureBlock,
   companyFooterStrip,
 } from '@/lib/pdf/shared'
 
@@ -53,7 +52,7 @@ function labelStatus(key: string, lang: PdfLang): string {
  * Data in `inv` is preserved as-is (plate, vehicle, beneficiary, items, totals) —
  * only the labels, direction and formatting switch with `lang`.
  */
-export function generateInvoicePDF(inv: InvoiceWithItems, lang: PdfLang = 'ar') {
+export function generateInvoicePDF(inv: InvoiceWithItems, lang: PdfLang = 'ar', creatorName?: string) {
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
   const currency = L(lang, 'currencySar')
 
@@ -169,26 +168,10 @@ export function generateInvoicePDF(inv: InvoiceWithItems, lang: PdfLang = 'ar') 
       </div>
     </div>
 
-    <!-- Signature strip (workshop / recipient / beneficiary) -->
-    <div class="signatures">
-      <div class="sig">
-        <div class="sig-label">${esc(L(lang, 'workshopOfficer'))}</div>
-        <div class="sig-line">${esc(L(lang, 'signature'))}</div>
-      </div>
-      <div class="sig">
-        <div class="sig-label">${esc(L(lang, 'recipient'))}</div>
-        <div class="sig-line">${esc(L(lang, 'signature'))}</div>
-      </div>
-      <div class="sig">
-        <div class="sig-label">${esc(L(lang, 'beneficiaryParty'))}</div>
-        <div class="sig-line">${esc(L(lang, 'signature'))}</div>
-      </div>
+    <!-- Invoice creator -->
+    <div class="invoice-creator">
+      ${lang === 'ar' ? 'أنشأ الفاتورة:' : 'Created by:'} ${esc(creatorName || inv.created_by || '-')}
     </div>
-
-    <!-- Service-manager signature (compact card) -->
-    ${managerSignatureBlock(lang, {
-      serviceManagerName: inv.maintenance_manager || undefined,
-    })}
 
     <!-- Company footer strip — horizontal, sticks to the bottom edge -->
     ${companyFooterStrip(lang)}

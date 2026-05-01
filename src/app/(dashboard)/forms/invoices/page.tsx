@@ -67,7 +67,7 @@ export default function InvoicesListPage() {
 
   const handleExport = async (inv: Invoice) => {
     // Ask the user which language the PDF should be printed in.
-    const lang = await askPdfLanguage(language as 'ar' | 'en')
+    const lang = await askPdfLanguage()
     if (!lang) return
     setExportingId(inv.id)
     try {
@@ -78,7 +78,16 @@ export default function InvoicesListPage() {
         .eq('invoice_id', inv.id)
         .order('row_number')
       if (error) throw error
-      generateInvoicePDF({ ...inv, items: items ?? [] } as InvoiceWithItems, lang)
+
+      // Get user full name
+      const { data: { user } } = await supabase.auth.getUser()
+      const { data: prefs } = await supabase
+        .from('user_preferences')
+        .select('full_name')
+        .eq('user_id', user?.id)
+        .single()
+
+      generateInvoicePDF({ ...inv, items: items ?? [] } as InvoiceWithItems, lang, prefs?.full_name || undefined)
     } catch (e: any) {
       toast.error(e?.message || (language === 'ar' ? 'تعذر تصدير الملف' : 'Export failed'))
     } finally {

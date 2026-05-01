@@ -34,7 +34,7 @@ import { useTranslation } from '@/hooks/useTranslation'
 import { useAllVehicles, buildVehicleSearchText, formatVehicleLabel, formatVehicleSublabel, type VehicleLite } from '@/hooks/useAllVehicles'
 import { toast } from '@/components/ui/Toast'
 import SearchableSelect, { type SearchableOption } from '@/components/ui/SearchableSelect'
-import { createCase } from '@/lib/cases/queries'
+import { createCase, listAvailableRvVehicles } from '@/lib/cases/queries'
 import { WORKSHOPS } from '@/lib/workshops/workshops'
 import { CASE_STATUSES } from '@/lib/cases/statuses'
 import { isRvProjectCode } from '@/lib/alternatives/rules'
@@ -57,6 +57,35 @@ export default function CreateCasePage() {
   // ─── Load all vehicles with pagination ───
   const { vehicles, loading: loadingVehicles } = useAllVehicles()
   console.log('[create-case] vehicles loaded', vehicles.length, vehicles)
+
+  // ─── Load available RV vehicles (already filters reserved ones) ───
+  const [availableRvVehicles, setAvailableRvVehicles] = useState<Array<{
+    id: string
+    plate_number: string | null
+    plate_number_ar: string | null
+    brand: string | null
+    manufacturer: string | null
+    model: string | null
+    project_code: string | null
+    current_odometer: number | null
+    chassis_number: string | null
+  }>>([])
+  const [loadingRvVehicles, setLoadingRvVehicles] = useState(true)
+
+  useEffect(() => {
+    const loadRvVehicles = async () => {
+      setLoadingRvVehicles(true)
+      try {
+        const rv = await listAvailableRvVehicles()
+        setAvailableRvVehicles(rv)
+      } catch (e) {
+        console.error('[create-case] failed to load RV vehicles', e)
+      } finally {
+        setLoadingRvVehicles(false)
+      }
+    }
+    loadRvVehicles()
+  }, [])
 
   // ─── Form state ───
   const [vehicleId, setVehicleId]   = useState('')
@@ -128,18 +157,17 @@ export default function CreateCasePage() {
     [vehicles]
   )
 
-  // Replacement vehicles are the RV-project pool, excluding the case's
-  // main vehicle (can't be its own alternative).
+  // Replacement vehicles are the available RV vehicles (already filtered to exclude reserved ones)
   const altVehicleOptions: SearchableOption[] = useMemo(() => {
-    return vehicles
-      .filter(v => isRvProjectCode(v.project_code) && v.id !== vehicleId)
+    return availableRvVehicles
+      .filter(v => v.id !== vehicleId)
       .map(v => ({
         value: v.id,
         label: formatVehicleLabel(v),
         sublabel: formatVehicleSublabel(v),
         searchText: buildVehicleSearchText(v),
       }))
-  }, [vehicles, vehicleId])
+  }, [availableRvVehicles, vehicleId])
 
   const workshopOptions: SearchableOption[] = useMemo(
     () => WORKSHOPS.map(w => ({ value: w.id, label: w.display_label, sublabel: w.city_ar })),

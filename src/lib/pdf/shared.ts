@@ -108,7 +108,28 @@ export const PDF_STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  @page { size: A4; margin: 14mm; }
+  @page { 
+    size: A4; 
+    margin: 14mm;
+  }
+  @page :header, @page :footer {
+    display: none;
+  }
+  
+  /* Hide browser print headers/footers - comprehensive approach */
+  @media print {
+    @page {
+      margin: 14mm;
+    }
+    body {
+      margin: 0;
+    }
+    /* Hide default browser print headers/footers */
+    @top-center, @top-left, @top-right, 
+    @bottom-center, @bottom-left, @bottom-right {
+      content: none;
+    }
+  }
 
   :root {
     --accent:       #B91C1C;   /* red — accent only */
@@ -360,38 +381,25 @@ export const PDF_STYLES = `
   /* ─── Company footer strip (horizontal, very bottom of page) ─── */
   .company-strip {
     margin-top: 16px;
-    padding: 8px 10px 4px;
-    border-top: 1px solid var(--accent);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: nowrap;
-    font-size: 9.5px;
+    padding: 0;
+    border-top: 2px solid var(--accent);
+    display: block;
+    width: 100%;
+  }
+  .company-strip .footer-brand {
+    width: 100%;
+    height: auto;
+    max-height: 120px;
+    object-fit: contain;
+    display: block;
+  }
+  
+  /* Invoice creator text */
+  .invoice-creator {
+    margin-top: 12px;
+    font-size: 9px;
     color: var(--muted);
-    line-height: 1.4;
-  }
-  .company-strip .company-logo {
-    height: 30px; width: auto; object-fit: contain;
-    flex-shrink: 0;
-  }
-  .company-strip .company-info {
-    flex: 1;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 2px 8px;
-  }
-  .company-strip .co-name {
-    font-weight: 800; color: var(--ink); font-size: 11px;
-    margin-inline-end: 2px;
-  }
-  .company-strip .co-sep { color: var(--line-strong); font-weight: 700; }
-  .company-strip .co-item strong {
-    color: var(--ink-2); font-weight: 700; margin-inline-end: 2px;
-  }
-  .company-strip .co-web {
-    color: var(--accent); font-weight: 700; text-decoration: none;
-    font-variant-numeric: tabular-nums;
+    text-align: center;
   }
 
   /* Avoid page breaks inside critical blocks when printing. */
@@ -502,35 +510,19 @@ export function paymentFooterBlock(
 }
 
 // ─── Company footer strip (horizontal, at the very bottom) ──────
-// Renders the official company-contact line required on every invoice
-// and misuse-form PDF: logo · company name · unified number · chamber
-// membership · phone · fax · ext · address · postal code · website.
-// Kept compact (~30px tall) so it does NOT make the page taller.
+// Renders the official company-contact footer image containing:
+// logo, company name, unified number, chamber membership, phone, fax,
+// extension, address, postal code, VAT number, and website.
+// Kept compact so it does NOT make the page taller.
 export function companyFooterStrip(lang: PdfLang): string {
   const origin  = typeof window !== 'undefined' ? window.location.origin : ''
-  const isAr    = lang === 'ar'
-  const c       = COMPANY_INFO
-  const sep     = '<span class="co-sep">·</span>'
-
-  const pieces: string[] = [
-    `<span class="co-name">${esc(isAr ? c.name_ar : c.name_en)}</span>`,
-    `<span class="co-item"><strong>${esc(L(lang, 'unifiedNumber'))}:</strong>${esc(c.unifiedNumber)}</span>`,
-    `<span class="co-item"><strong>${esc(L(lang, 'chamberMembership'))}:</strong>${esc(c.chamberMembership)}</span>`,
-    `<span class="co-item"><strong>${esc(L(lang, 'phoneShort'))}:</strong>${esc(c.phone)}</span>`,
-    `<span class="co-item"><strong>${esc(L(lang, 'faxShort'))}:</strong>${esc(c.fax)}</span>`,
-    `<span class="co-item"><strong>${esc(L(lang, 'extensionShort'))}:</strong>${esc(c.extension)}</span>`,
-    `<span class="co-item">${esc(isAr ? c.address_ar : c.address_en)}</span>`,
-    `<span class="co-item"><strong>${esc(L(lang, 'postalCodeShort'))}:</strong>${esc(c.postalCode)}</span>`,
-    `<a class="co-web" href="${esc(c.websiteUrl)}">${esc(c.websiteLabel)}</a>`,
-  ]
+  // Add cache-busting timestamp to ensure new image is loaded
+  const cacheBuster = Date.now()
 
   return `
     <div class="company-strip">
-      <img src="${origin}/images/logo.png" alt="logo" class="company-logo"
+      <img src="${origin}/images/footer-brand.png?v=${cacheBuster}" alt="company footer" class="footer-brand"
            onerror="this.style.display='none'" />
-      <div class="company-info">
-        ${pieces.join(sep)}
-      </div>
     </div>
   `
 }

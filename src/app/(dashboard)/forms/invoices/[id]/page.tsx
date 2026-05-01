@@ -58,7 +58,15 @@ export default function InvoiceDetailPage() {
     if (!lang) return
     setExporting(true)
     try {
-      generateInvoicePDF({ ...inv, items } as InvoiceWithItems, lang)
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      const { data: prefs } = await supabase
+        .from('user_preferences')
+        .select('full_name')
+        .eq('user_id', user?.id)
+        .single()
+      
+      generateInvoicePDF({ ...inv, items } as InvoiceWithItems, lang, prefs?.full_name || undefined)
     } catch (e: any) {
       toast.error(e?.message || 'Export failed')
     } finally {

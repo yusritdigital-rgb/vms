@@ -270,10 +270,17 @@ export default function CreateInvoicePage() {
     if (opts.exportAfter) {
       const lang = await askPdfLanguage(language as 'ar' | 'en')
       if (lang) {
+        // Get user full name
+        const { data: prefs } = await supabase
+          .from('user_preferences')
+          .select('full_name')
+          .eq('user_id', user?.id)
+          .single()
+        
         generateInvoicePDF({
           ...(inserted as any),
           items: rows.map(r => ({ ...r, line_total: r.quantity * r.unit_price })),
-        } as InvoiceWithItems, lang)
+        } as InvoiceWithItems, lang, prefs?.full_name || undefined)
       }
     }
     router.push(`/forms/invoices/${inserted.id}`)

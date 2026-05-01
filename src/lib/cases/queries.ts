@@ -227,6 +227,40 @@ export interface CreateCaseInput {
 export async function createCase(input: CreateCaseInput): Promise<CaseRow> {
   const supabase = createClient()
 
+  // Rule 1: Check if main vehicle already has an open case
+  const { data: existingOpenCase, error: checkErr } = await supabase
+    .from('job_cards')
+    .select('id, job_card_number, status')
+    .eq('vehicle_id', input.vehicle_id)
+    .not('status', 'in', `(${CLOSED_STATUSES.map(s => `"${s}"`).join(',')})`)
+    .maybeSingle()
+  
+  if (checkErr) {
+    logPgError('[cases/queries] createCase: open case check failed', checkErr, { vehicle_id: input.vehicle_id })
+  }
+  
+  if (existingOpenCase) {
+    throw new Error('لا يمكن إنشاء حالة جديدة لهذه المركبة لوجود حالة مفتوحة حالياً.')
+  }
+
+  // Rule 2: Check if replacement vehicle is already assigned to an open case
+  if (input.has_replacement_vehicle && input.replacement_vehicle_id) {
+    const { data: existingReplacement, error: repCheckErr } = await supabase
+      .from('job_cards')
+      .select('id, job_card_number')
+      .eq('replacement_vehicle_id', input.replacement_vehicle_id)
+      .not('status', 'in', `(${CLOSED_STATUSES.map(s => `"${s}"`).join(',')})`)
+      .maybeSingle()
+    
+    if (repCheckErr) {
+      logPgError('[cases/queries] createCase: replacement check failed', repCheckErr, { replacement_vehicle_id: input.replacement_vehicle_id })
+    }
+    
+    if (existingReplacement) {
+      throw new Error('لا يمكن صرف هذه البديلة لأنها مرتبطة بحالة مفتوحة حالياً.')
+    }
+  }
+
   const payload: Record<string, any> = {
     vehicle_id:              input.vehicle_id,
     type:                    input.type,
@@ -340,6 +374,23 @@ export async function assignReplacementVehicle(args: {
     return { ok: false, error: 'replacement_same_as_main_vehicle' }
   }
 
+  // Rule 2: Check if replacement vehicle is already assigned to another open case
+  const { data: existingReplacement, error: repCheckErr } = await supabase
+    .from('job_cards')
+    .select('id, job_card_number')
+    .eq('replacement_vehicle_id', args.replacementVehicleId)
+    .not('status', 'in', `(${CLOSED_STATUSES.map(s => `"${s}"`).join(',')})`)
+    .neq('id', args.caseId)
+    .maybeSingle()
+  
+  if (repCheckErr) {
+    logPgError('[cases/queries] assignReplacementVehicle: replacement check failed', repCheckErr, { replacement_vehicle_id: args.replacementVehicleId })
+  }
+  
+  if (existingReplacement) {
+    return { ok: false, error: 'لا يمكن صرف هذه البديلة لأنها مرتبطة بحالة مفتوحة حالياً.' }
+  }
+
   const { error: upErr } = await supabase
     .from('job_cards')
     .update({
@@ -399,6 +450,7 @@ export async function listAvailableRvVehicles(opts: {
   model: string | null
   project_code: string | null
   current_odometer: number | null
+  chassis_number: string | null
 }>> {
   const supabase = createClient()
 
@@ -406,7 +458,7 @@ export async function listAvailableRvVehicles(opts: {
   //    PostgREST allows via `ilike`.
   const { data: rvRows, error: vErr } = await supabase
     .from('vehicles')
-    .select('id, plate_number, plate_number_ar, brand, manufacturer, model, project_code, current_odometer')
+    .select('id, plate_number, plate_number_ar, brand, manufacturer, model, project_code, current_odometer, chassis_number')
     .ilike('project_code', 'RV%')
     .order('plate_number', { ascending: true, nullsFirst: false })
   if (vErr) {
