@@ -22,6 +22,7 @@ import { toast } from '@/components/ui/Toast'
 import {
   assignReplacementVehicle,
   listAvailableRvVehicles,
+  getLatestReplacementReturnOdometer,
 } from '@/lib/cases/queries'
 
 interface RvOption {
@@ -52,6 +53,8 @@ export default function AssignReplacementCard({
   const [vehicleId, setVehicleId]     = useState('')
   const [odo, setOdo]                 = useState<string>('')
   const [saving, setSaving]           = useState(false)
+  const [latestReturnOdo, setLatestReturnOdo] = useState<number | null>(null)
+  const [loadingLatestReturn, setLoadingLatestReturn] = useState(false)
 
   // Lazily load the RV pool only when the user opens the form, so the
   // case-detail page stays cheap on first paint.
@@ -71,16 +74,33 @@ export default function AssignReplacementCard({
   )
   const lastKnown = selected?.current_odometer ?? null
 
-  // Prefill odometer from the cached current_odometer when a vehicle is
-  // picked (only if the user hasn't typed yet). DB trigger remains the
+  // Fetch latest return odometer when a vehicle is selected
+  useEffect(() => {
+    if (!vehicleId) {
+      setLatestReturnOdo(null)
+      return
+    }
+    let cancelled = false
+    setLoadingLatestReturn(true)
+    getLatestReplacementReturnOdometer(vehicleId)
+      .then(odo => { if (!cancelled) setLatestReturnOdo(odo) })
+      .finally(() => { if (!cancelled) setLoadingLatestReturn(false) })
+    return () => { cancelled = true }
+  }, [vehicleId])
+
+  // Prefill odometer from the latest return odometer (preferred) or current_odometer
+  // when a vehicle is picked (only if the user hasn't typed yet). DB trigger remains the
   // final guard.
   useEffect(() => {
     if (!selected) return
     if (odo !== '') return
-    if (selected.current_odometer != null) {
+    // Prefer latest return odometer over current_odometer
+    if (latestReturnOdo != null) {
+      setOdo(String(latestReturnOdo))
+    } else if (selected.current_odometer != null) {
       setOdo(String(selected.current_odometer))
     }
-  }, [selected]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selected, latestReturnOdo]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const options: SearchableOption[] = useMemo(
     () => pool.map(v => ({
@@ -104,13 +124,15 @@ export default function AssignReplacementCard({
     if (Number(odo) < 0) {
       return isAr ? 'العداد غير صالح' : 'Odometer must be ≥ 0'
     }
-    if (lastKnown != null && Number(odo) < lastKnown) {
+    // Check against latest return odometer (preferred) or last known reading
+    const minOdo = latestReturnOdo != null ? latestReturnOdo : lastKnown
+    if (minOdo != null && Number(odo) < minOdo) {
       return isAr
-        ? `العداد أقل من آخر قراءة معروفة (${lastKnown.toLocaleString('en-US')} كم)`
-        : `Odometer is below last known reading (${lastKnown.toLocaleString('en-US')} km)`
+        ? `العداد أقل من آخر عداد عودة مسجل (${minOdo.toLocaleString('en-US')} كم)`
+        : `Odometer is below last return reading (${minOdo.toLocaleString('en-US')} km)`
     }
     return null
-  }, [vehicleId, odo, lastKnown, isAr])
+  }, [vehicleId, odo, lastKnown, latestReturnOdo, isAr])
 
   const handleSave = async () => {
     if (validation) { toast.error(validation); return }
@@ -201,7 +223,11 @@ export default function AssignReplacementCard({
             className="w-full px-2.5 py-1.5 text-xs border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500"
           />
           <p className="mt-1 text-[10px] text-gray-500 dark:text-gray-400">
-            {lastKnown != null
+            {latestReturnOdo != null
+              ? (isAr
+                  ? `آخر عداد عودة: ${latestReturnOdo.toLocaleString('en-US')} كم`
+                  : `Last return odometer: ${latestReturnOdo.toLocaleString('en-US')} km`)
+              : lastKnown != null
               ? (isAr
                   ? `آخر قراءة معروفة: ${lastKnown.toLocaleString('en-US')} كم`
                   : `Last known: ${lastKnown.toLocaleString('en-US')} km`)

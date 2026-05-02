@@ -30,7 +30,8 @@ import { AlertTriangle, Check, Pencil, X } from 'lucide-react'
 import CaseUpdateForm        from '@/components/cases/CaseUpdateForm'
 import CaseTimeline          from '@/components/cases/CaseTimeline'
 import AssignReplacementCard from '@/components/cases/AssignReplacementCard'
-import { generateReplacementChecklistPDF } from '@/lib/pdf/replacementChecklist'
+import { generateReplacementChecklistPDF, generateReplacementReturnPDF } from '@/lib/pdf/replacementChecklist'
+import { generateReceivingHandoverPDF } from '@/lib/pdf/receivingHandover'
 
 interface ReplacementVehicle {
   id: string
@@ -63,15 +64,45 @@ export default function CaseDetailPage() {
 
     const supabase = createClient()
 
+    // Debug logging
+    console.log('[DEBUG] Case data:', {
+      replacement_vehicle_id: row?.replacement_vehicle_id,
+      replacement_vehicle: row?.replacement_vehicle,
+      status: row?.status,
+    })
+
     // Replacement vehicle snapshot — includes the project code and the
     // handover odometer reading so the print form can be re-issued at
     // any time without re-querying.
-    if (row?.replacement_vehicle_id) {
+    // Always load if replacement_vehicle_id exists, even for closed cases,
+    // to preserve historical data for PDF generation.
+    // If replacement_vehicle_id is null (e.g., for cases closed before the fix),
+    // try to restore from vehicle_odometer_readings history.
+    let replacementVehicleId = row?.replacement_vehicle_id
+
+    // If no replacement_vehicle_id, try to restore from history
+    if (!replacementVehicleId && row?.id) {
+      const { data: reading } = await supabase
+        .from('vehicle_odometer_readings')
+        .select('vehicle_id')
+        .eq('case_id', row.id)
+        .eq('source', 'case_replacement_entry')
+        .limit(1)
+        .maybeSingle()
+      if (reading && (reading as any).vehicle_id) {
+        replacementVehicleId = (reading as any).vehicle_id
+        console.log('[DEBUG] Restored replacement_vehicle_id from history:', replacementVehicleId)
+      }
+    }
+
+    if (replacementVehicleId) {
       const { data: v } = await supabase
         .from('vehicles')
         .select('id, plate_number, brand, model, project_code, current_odometer')
-        .eq('id', row.replacement_vehicle_id)
+        .eq('id', replacementVehicleId)
         .maybeSingle()
+
+      console.log('[DEBUG] Vehicle data from query:', v)
 
       // Look up the original handover reading for THIS case so the
       // printed form reflects the value captured at assignment time,
@@ -80,8 +111,8 @@ export default function CaseDetailPage() {
       const { data: reading, error: readErr } = await supabase
         .from('vehicle_odometer_readings')
         .select('reading')
-        .eq('case_id', row.id)
-        .eq('vehicle_id', row.replacement_vehicle_id)
+        .eq('case_id', row?.id)
+        .eq('vehicle_id', replacementVehicleId)
         .eq('source', 'case_replacement_entry')
         .order('recorded_at', { ascending: true })
         .limit(1)
@@ -239,12 +270,77 @@ export default function CaseDetailPage() {
 
       {/* Info grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Vehicle */}
-        <InfoBlock title={isAr ? 'المركبة' : 'Vehicle'} icon={<Car className="w-4 h-4" />}>
+        {/* Main vehicle */}
+        <InfoBlock title={isAr ? 'المركبة الأساسية' : 'Main vehicle'} icon={<Car className="w-4 h-4" />}>
           <Row k={isAr ? 'اللوحة' : 'Plate'} v={c.vehicle?.plate_number ?? '—'} />
-          <Row k={isAr ? 'الشاسيه' : 'Chassis'} v={c.vehicle?.chassis_number ?? '—'} />
-          <Row k={isAr ? 'الماركة' : 'Brand'} v={[c.vehicle?.brand, c.vehicle?.model].filter(Boolean).join(' ') || '—'} />
+          <Row k={isAr ? 'المركبة' : 'Model'} v={[c.vehicle?.brand, c.vehicle?.model].filter(Boolean).join(' ') || '—'} />
           <Row k={isAr ? 'المشروع' : 'Project'} v={c.vehicle?.project_code ?? '—'} />
+          {/* Receiving form button - always available */}
+          <button
+            type="button"
+            onClick={() => {
+              const handoverVehicles = [
+                {
+                  plateNumber: c.vehicle?.plate_number ?? null,
+                  vehicleLabel: isAr ? 'المركبة الأساسية' : 'Main Vehicle',
+                  movementType: 'دخول' as const,
+                  odometer: c.entry_odometer,
+                  vehicleMakeModel: [c.vehicle?.brand, c.vehicle?.model].filter(Boolean).join(' ') || null,
+                },
+                ...(alt || c.replacement_vehicle ? [{
+                  plateNumber: alt?.plate_number ?? c.replacement_vehicle?.plate_number ?? null,
+                  vehicleLabel: isAr ? 'المركبة البديلة' : 'Replacement Vehicle',
+                  movementType: 'خروج' as const,
+                  odometer: alt?.handover_odometer,
+                  vehicleMakeModel: [alt?.brand ?? c.replacement_vehicle?.brand, alt?.model ?? c.replacement_vehicle?.model].filter(Boolean).join(' ') || null,
+                }] : []),
+              ]
+              generateReceivingHandoverPDF({
+                caseNumber: c.job_card_number,
+                caseDate: c.received_at,
+                workshop: [c.workshop_name, c.workshop_city].filter(Boolean).join(' — ') || null,
+                vehicles: handoverVehicles,
+              })
+            }}
+            className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            {isAr ? 'نموذج الاستلام' : 'Receiving Form'}
+          </button>
+          {/* Handover form button - only available after exit odometer is recorded */}
+          {c.exit_odometer != null && (
+            <button
+              type="button"
+              onClick={() => {
+                const handoverVehicles = [
+                  {
+                    plateNumber: c.vehicle?.plate_number ?? null,
+                    vehicleLabel: isAr ? 'المركبة الأساسية' : 'Main Vehicle',
+                    movementType: 'خروج' as const,
+                    odometer: c.exit_odometer,
+                    vehicleMakeModel: [c.vehicle?.brand, c.vehicle?.model].filter(Boolean).join(' ') || null,
+                  },
+                  ...(alt || c.replacement_vehicle ? [{
+                    plateNumber: alt?.plate_number ?? c.replacement_vehicle?.plate_number ?? null,
+                    vehicleLabel: isAr ? 'المركبة البديلة' : 'Replacement Vehicle',
+                    movementType: 'دخول' as const,
+                    odometer: c.replacement_return_odometer,
+                    vehicleMakeModel: [alt?.brand ?? c.replacement_vehicle?.brand, alt?.model ?? c.replacement_vehicle?.model].filter(Boolean).join(' ') || null,
+                  }] : []),
+                ]
+                generateReceivingHandoverPDF({
+                  caseNumber: c.job_card_number,
+                  caseDate: c.received_at,
+                  workshop: [c.workshop_name, c.workshop_city].filter(Boolean).join(' — ') || null,
+                  vehicles: handoverVehicles,
+                })
+              }}
+              className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              {isAr ? 'نموذج التسليم' : 'Handover Form'}
+            </button>
+          )}
         </InfoBlock>
 
         {/* Workshop */}
@@ -274,38 +370,13 @@ export default function CaseDetailPage() {
 
         {/* Replacement vehicle */}
         <InfoBlock title={isAr ? 'المركبة البديلة' : 'Replacement vehicle'} icon={<Briefcase className="w-4 h-4" />}>
-          {alt ? (
+          {alt || c.replacement_vehicle ? (
             <>
-              <Row k={isAr ? 'اللوحة' : 'Plate'} v={alt.plate_number ?? '—'} />
-              <Row k={isAr ? 'المركبة' : 'Model'} v={[alt.brand, alt.model].filter(Boolean).join(' ') || '—'} />
-              {/* Print button — always available while the case has a
-                  replacement linked. Works for OPEN and CLOSED cases
-                  (closed cases keep the form for historical reprints). */}
-              <button
-                type="button"
-                onClick={() => generateReplacementChecklistPDF({
-                  caseNumber: c.job_card_number,
-                  caseDate:   c.received_at,
-                  workshop:   [c.workshop_name, c.workshop_city].filter(Boolean).join(' — ') || null,
-                  assignedTo: updaterName,
-                  mainVehicle: {
-                    plate_number: c.vehicle?.plate_number ?? null,
-                    make_model:   [c.vehicle?.brand, c.vehicle?.model].filter(Boolean).join(' ') || null,
-                    project_code: c.vehicle?.project_code ?? null,
-                    odometer:     c.entry_odometer ?? null,
-                  },
-                  replacementVehicle: {
-                    plate_number: alt.plate_number,
-                    make_model:   [alt.brand, alt.model].filter(Boolean).join(' ') || null,
-                    project_code: alt.project_code,
-                    odometer:     alt.handover_odometer,
-                  },
-                })}
-                className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                {isAr ? 'طباعة نموذج الاستلام والتسليم' : 'Print handover form'}
-              </button>
+              <Row k={isAr ? 'اللوحة' : 'Plate'} v={alt?.plate_number ?? c.replacement_vehicle?.plate_number ?? '—'} />
+              <Row k={isAr ? 'المركبة' : 'Model'} v={[alt?.brand ?? c.replacement_vehicle?.brand, alt?.model ?? c.replacement_vehicle?.model].filter(Boolean).join(' ') || '—'} />
+              {c.replacement_return_odometer && (
+                <Row k={isAr ? 'عداد العودة' : 'Return Odometer'} v={`${c.replacement_return_odometer.toLocaleString('en-US')} km`} />
+              )}
             </>
           ) : closed ? (
             // Closed cases stay read-only as historical data — no assign button.
@@ -345,6 +416,25 @@ export default function CaseDetailPage() {
             currentStatus={c.status}
             isAr={isAr}
             onSaved={() => { void reload(); setTimelineKey(k => k + 1) }}
+            caseData={{
+              replacement_vehicle_id: c.replacement_vehicle_id,
+              replacement_return_odometer: c.replacement_return_odometer,
+            }}
+            vehicleData={{
+              mainVehicle: {
+                plate_number: c.vehicle?.plate_number || null,
+                make_model: [c.vehicle?.brand, c.vehicle?.model].filter(Boolean).join(' ') || null,
+                exit_odometer: c.exit_odometer || null,
+              },
+              replacementVehicle: c.replacement_vehicle ? {
+                plate_number: c.replacement_vehicle.plate_number || null,
+                make_model: [c.replacement_vehicle.brand, c.replacement_vehicle.model].filter(Boolean).join(' ') || null,
+                return_odometer: c.replacement_return_odometer || null,
+              } : undefined,
+            }}
+            caseNumber={c.job_card_number}
+            workshopName={c.workshop_name}
+            receivedAt={c.received_at}
           />
         </section>
       )}

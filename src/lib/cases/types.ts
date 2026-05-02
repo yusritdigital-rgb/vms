@@ -23,6 +23,16 @@ export interface CaseRow {
   workshop_city: string | null
   vehicle_id: string | null
   replacement_vehicle_id: string | null
+  replacement_vehicle?: {
+    id: string
+    plate_number: string | null
+    project_code: string | null
+    brand: string | null
+    model: string | null
+  } | null
+  replacement_return_odometer: number | null
+  replacement_return_date: string | null
+  replacement_return_notes: string | null
   complaint_description: string | null
   internal_notes: string | null
   entry_odometer: number

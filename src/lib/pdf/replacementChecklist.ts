@@ -44,6 +44,24 @@ export interface ChecklistArgs {
   replacementVehicle: ChecklistVehicle
 }
 
+export interface ReplacementReturnArgs {
+  caseNumber: string | null
+  caseDate: string | null            // ISO
+  workshop: string | null            // display label
+  returnDate: string | null           // ISO
+  mainVehicle: {
+    plate_number: string | null
+    make_model: string | null
+  }
+  replacementVehicle: {
+    plate_number: string | null
+    make_model: string | null
+    outgoing_odometer: number | null
+    return_odometer: number | null
+  }
+  returnNotes?: string | null
+}
+
 // Only the essential items the workshop hands over with the vehicle.
 // Each row is checked twice — once for the main vehicle (الأساسية) and
 // once for the replacement (البديلة) — so the officer fills both
@@ -382,3 +400,259 @@ export function generateReplacementChecklistPDF(args: ChecklistArgs): void {
     : 'Handover Form'
   openPrintWindow(html, lang, title)
 }
+
+/**
+ * Generate a replacement vehicle return checklist PDF.
+ * This is a simplified form focused on the return process, showing
+ * the replacement vehicle details, odometer readings, and return information.
+ */
+export function generateReplacementReturnPDF(args: ReplacementReturnArgs): void {
+  const lang = 'ar' as const
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+
+  const html = `
+    <style>
+      /* Tighten the global doc-header for this single-page form. */
+      .doc-header .doc-title { font-size: 17px; }
+      .doc-header .doc-title .sub { letter-spacing: 1px; font-size: 9.5px; }
+
+      /* ── Vehicle identity card ───────────────────── */
+      .vcard {
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #fff;
+        overflow: hidden;
+        page-break-inside: avoid;
+        margin-top: 8px;
+      }
+      .vcard-title {
+        background: var(--ink);
+        color: #fff;
+        font-weight: 800;
+        font-size: 11px;
+        padding: 5px 9px;
+        letter-spacing: 0.3px;
+      }
+      .vcard-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px 6px;
+        padding: 6px 8px;
+        background: var(--panel);
+      }
+      .vcard-grid .kv {
+        display: flex;
+        justify-content: space-between;
+        gap: 6px;
+        padding: 3px 6px;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        font-size: 10.5px;
+      }
+      .vcard-grid .kv .k { color: var(--muted); font-weight: 600; }
+      .vcard-grid .kv .v { color: var(--ink); font-weight: 700; }
+
+      /* ── Odometer comparison table ────────────────── */
+      .section-h {
+        margin-top: 10px;
+        margin-bottom: 4px;
+        padding: 4px 8px;
+        background: var(--panel-2);
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 800;
+        color: var(--ink);
+        letter-spacing: 0.3px;
+      }
+      table.odometer {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 11px;
+        page-break-inside: avoid;
+      }
+      table.odometer thead th {
+        background: var(--panel);
+        color: var(--ink);
+        font-weight: 800;
+        padding: 6px 8px;
+        text-align: start;
+        border: 1px solid var(--line);
+      }
+      table.odometer tbody td {
+        padding: 6px 8px;
+        border: 1px solid var(--line);
+        background: #fff;
+      }
+      table.odometer tbody td.label { font-weight: 600; color: var(--muted); }
+      table.odometer tbody td.value { font-weight: 700; color: var(--ink); }
+
+      /* ── Notes section ───────────────────────────── */
+      .notes-section {
+        margin-top: 10px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 8px 10px;
+        background: #fff;
+        page-break-inside: avoid;
+      }
+      .notes-section .notes-title {
+        font-size: 11px;
+        font-weight: 800;
+        color: var(--ink);
+        margin-bottom: 4px;
+      }
+      .notes-section .notes-content {
+        font-size: 10.5px;
+        color: var(--ink-2);
+        min-height: 60px;
+        border: 1px dashed var(--line);
+        border-radius: 4px;
+        padding: 6px;
+        background: var(--panel);
+      }
+
+      /* ── Signatures ──────────────────────────────── */
+      .sig-strip {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        margin-top: 12px;
+        padding-top: 8px;
+        border-top: 1px solid var(--line);
+        page-break-inside: avoid;
+      }
+      .sig-strip .sig { text-align: center; }
+      .sig-strip .sig .role {
+        font-size: 10.5px; font-weight: 800; color: var(--ink-2);
+        margin-bottom: 26px;
+      }
+      .sig-strip .sig .line {
+        border-top: 1px solid var(--line-strong);
+        padding-top: 4px;
+        font-size: 9.5px;
+        color: var(--muted);
+      }
+    </style>
+
+    <!-- Header -->
+    <div class="doc-header">
+      <div class="brand">
+        <img src="${origin}/images/logo.png" alt="logo"
+             onerror="this.style.display='none'" />
+        <div>
+          <div class="org-name">${esc(COMPANY_INFO.name_ar)}</div>
+          <div class="org-sub">${esc(COMPANY_INFO.name_en)}</div>
+        </div>
+      </div>
+      <div class="doc-title-box">
+        <div class="doc-title">
+          نموذج استلام المركبة البديلة
+          <span class="sub">REPLACEMENT VEHICLE RETURN FORM</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Meta strip -->
+    <div class="doc-meta">
+      <div class="cell">
+        <span class="k">رقم الحالة</span>
+        <span class="v">${esc(args.caseNumber) || '—'}</span>
+      </div>
+      <div class="cell">
+        <span class="k">${esc(L(lang, 'dateLabel'))}</span>
+        <span class="v">${esc(fmtDate(args.caseDate, lang))}</span>
+      </div>
+      <div class="cell">
+        <span class="k">الورشة</span>
+        <span class="v">${esc(args.workshop) || '—'}</span>
+      </div>
+      <div class="cell">
+        <span class="k">تاريخ العودة</span>
+        <span class="v">${esc(fmtDate(args.returnDate, lang))}</span>
+      </div>
+    </div>
+
+    <!-- Main vehicle reference -->
+    <div class="section-h">مرجع المركبة الأساسية</div>
+    <div class="vcard">
+      <div class="vcard-grid">
+        <div class="kv"><span class="k">رقم اللوحة</span><span class="v">${esc(args.mainVehicle.plate_number) || '—'}</span></div>
+        <div class="kv"><span class="k">نوع المركبة</span><span class="v">${esc(args.mainVehicle.make_model) || '—'}</span></div>
+      </div>
+    </div>
+
+    <!-- Replacement vehicle details -->
+    <div class="section-h">بيانات المركبة البديلة</div>
+    <div class="vcard">
+      <div class="vcard-grid">
+        <div class="kv"><span class="k">رقم اللوحة</span><span class="v">${esc(args.replacementVehicle.plate_number) || '—'}</span></div>
+        <div class="kv"><span class="k">نوع المركبة</span><span class="v">${esc(args.replacementVehicle.make_model) || '—'}</span></div>
+      </div>
+    </div>
+
+    <!-- Odometer comparison -->
+    <div class="section-h">عداد المركبة البديلة</div>
+    <table class="odometer">
+      <thead>
+        <tr>
+          <th>البيان</th>
+          <th>القيمة</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="label">عداد التسليم (الخروج)</td>
+          <td class="value">${
+            args.replacementVehicle.outgoing_odometer != null 
+              ? esc(args.replacementVehicle.outgoing_odometer.toLocaleString('en-US')) + ' كم'
+              : '—'
+          }</td>
+        </tr>
+        <tr>
+          <td class="label">عداد العودة (الاستلام)</td>
+          <td class="value">${
+            args.replacementVehicle.return_odometer != null 
+              ? esc(args.replacementVehicle.return_odometer.toLocaleString('en-US')) + ' كم'
+              : '—'
+          }</td>
+        </tr>
+        <tr>
+          <td class="label">فرق العداد</td>
+          <td class="value">${
+            args.replacementVehicle.outgoing_odometer != null && args.replacementVehicle.return_odometer != null
+              ? esc((args.replacementVehicle.return_odometer - args.replacementVehicle.outgoing_odometer).toLocaleString('en-US')) + ' كم'
+              : '—'
+          }</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Notes section -->
+    <div class="notes-section">
+      <div class="notes-title">ملاحظات العودة</div>
+      <div class="notes-content">${esc(args.returnNotes) || ''}</div>
+    </div>
+
+    <!-- Signature strip -->
+    <div class="sig-strip">
+      <div class="sig">
+        <div class="role">مسؤول الورشة</div>
+        <div class="line">التوقيع</div>
+      </div>
+      <div class="sig">
+        <div class="role">العميل / السائق</div>
+        <div class="line">التوقيع</div>
+      </div>
+    </div>
+
+    <!-- Company footer strip -->
+    ${companyFooterStrip(lang)}
+  `
+
+  const title = args.caseNumber
+    ? `Return Form ${args.caseNumber}`
+    : 'Return Form'
+  openPrintWindow(html, lang, title)
+}
+

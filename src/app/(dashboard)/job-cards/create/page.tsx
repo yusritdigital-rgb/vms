@@ -34,7 +34,8 @@ import { useTranslation } from '@/hooks/useTranslation'
 import { useAllVehicles, buildVehicleSearchText, formatVehicleLabel, formatVehicleSublabel, type VehicleLite } from '@/hooks/useAllVehicles'
 import { toast } from '@/components/ui/Toast'
 import SearchableSelect, { type SearchableOption } from '@/components/ui/SearchableSelect'
-import { createCase, listAvailableRvVehicles } from '@/lib/cases/queries'
+import { createCase, listAvailableRvVehicles, getLatestReplacementReturnOdometer } from '@/lib/cases/queries'
+import { generateReceivingHandoverPDF } from '@/lib/pdf/receivingHandover'
 import { WORKSHOPS } from '@/lib/workshops/workshops'
 import { CASE_STATUSES } from '@/lib/cases/statuses'
 import { isRvProjectCode } from '@/lib/alternatives/rules'
@@ -113,6 +114,7 @@ export default function CreateCasePage() {
   const [altVehicleId, setAltVehicleId]     = useState<string>('')
   const [noAltReason, setNoAltReason]       = useState<string>('')
   const [noAltReasonCustom, setNoAltReasonCustom] = useState<string>('')
+  const [latestReturnOdo, setLatestReturnOdo] = useState<number | null>(null)
 
   const [saving, setSaving] = useState(false)
 
@@ -134,6 +136,26 @@ export default function CreateCasePage() {
     }
   }, [altVehicleId, vehicles]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Fetch latest return odometer for replacement vehicle
+  useEffect(() => {
+    if (!altVehicleId) {
+      setLatestReturnOdo(null)
+      return
+    }
+    getLatestReplacementReturnOdometer(altVehicleId)
+      .then(odo => setLatestReturnOdo(odo))
+      .catch(e => console.error('[create-case] failed to fetch latest return odometer', e))
+  }, [altVehicleId])
+
+  // Prefill alt odometer from latest return (preferred) or current_odometer
+  useEffect(() => {
+    if (!altVehicleId) return
+    if (altEntryOdo) return // Don't override if user already typed
+    if (latestReturnOdo != null) {
+      setAltEntryOdo(String(latestReturnOdo))
+    }
+  }, [altVehicleId, latestReturnOdo, altEntryOdo]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Last-known readings for the inline hints under each odometer input.
   const mainVehicle = useMemo(
     () => vehicles.find(v => v.id === vehicleId) ?? null,
@@ -145,6 +167,7 @@ export default function CreateCasePage() {
   )
   const mainLastKnown = mainVehicle?.current_odometer ?? null
   const altLastKnown  = altVehicle?.current_odometer ?? null
+  const altMinOdo = latestReturnOdo != null ? latestReturnOdo : altLastKnown
 
   // ─── Options ───
   const vehicleOptions: SearchableOption[] = useMemo(
@@ -202,10 +225,10 @@ export default function CreateCasePage() {
       if (Number(altEntryOdo) < 0) {
         return isAr ? 'عداد البديلة غير صالح' : 'Replacement odometer must be ≥ 0'
       }
-      if (altLastKnown != null && Number(altEntryOdo) < altLastKnown) {
+      if (altMinOdo != null && Number(altEntryOdo) < altMinOdo) {
         return isAr
-          ? `عداد البديلة أقل من آخر قراءة معروفة (${altLastKnown.toLocaleString('en-US')} كم)`
-          : `Replacement odometer is below last known reading (${altLastKnown.toLocaleString('en-US')} km)`
+          ? `عداد البديلة أقل من آخر عداد عودة مسجل (${altMinOdo.toLocaleString('en-US')} كم)`
+          : `Replacement odometer is below last return reading (${altMinOdo.toLocaleString('en-US')} km)`
       }
     } else {
       if (!noAltReason) return isAr ? 'اختر سبب عدم وجود بديلة' : 'Pick a no-replacement reason'
@@ -214,7 +237,7 @@ export default function CreateCasePage() {
       }
     }
     return null
-  }, [vehicleId, type, receivedAt, entryOdo, mainLastKnown, hasAlt, altVehicleId, altEntryOdo, altLastKnown, noAltReason, noAltReasonCustom, isAr])
+  }, [vehicleId, type, receivedAt, entryOdo, mainLastKnown, hasAlt, altVehicleId, altEntryOdo, altMinOdo, latestReturnOdo, noAltReason, noAltReasonCustom, isAr])
 
   const canSave = !validationError && !saving
 
@@ -253,6 +276,36 @@ export default function CreateCasePage() {
       })
 
       toast.success(isAr ? `تم إنشاء الحالة ${row.job_card_number}` : `Case ${row.job_card_number} created`)
+      
+      // Generate receiving handover form
+      const workshop = WORKSHOPS.find(w => w.id === workshopId)
+      const mainVehicle = vehicles.find(v => v.id === vehicleId)
+      const altVehicle = hasAlt ? vehicles.find(v => v.id === altVehicleId) : null
+      
+      const handoverVehicles = [
+        {
+          plateNumber: mainVehicle?.plate_number || mainVehicle?.plate_number_ar || null,
+          vehicleLabel: isAr ? 'المركبة الأساسية' : 'Main Vehicle',
+          movementType: 'دخول' as const,
+          odometer: Number(entryOdo) || null,
+          vehicleMakeModel: [mainVehicle?.brand || mainVehicle?.manufacturer, mainVehicle?.model].filter(Boolean).join(' ') || null,
+        },
+        ...(altVehicle ? [{
+          plateNumber: altVehicle.plate_number || altVehicle.plate_number_ar || null,
+          vehicleLabel: isAr ? 'المركبة البديلة' : 'Replacement Vehicle',
+          movementType: 'خروج' as const,
+          odometer: Number(altEntryOdo) || null,
+          vehicleMakeModel: [altVehicle.brand || altVehicle.manufacturer, altVehicle.model].filter(Boolean).join(' ') || null,
+        }] : []),
+      ]
+
+      generateReceivingHandoverPDF({
+        caseNumber: row.job_card_number,
+        caseDate: row.received_at,
+        workshop: workshop?.name_ar || null,
+        vehicles: handoverVehicles,
+      })
+
       router.refresh()
       router.push(`/job-cards?new=${encodeURIComponent(row.id)}`)
     } catch (err: any) {
@@ -548,7 +601,11 @@ export default function CreateCasePage() {
                       required
                     />
                     <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
-                      {altLastKnown != null
+                      {latestReturnOdo != null
+                        ? (isAr
+                            ? `آخر عداد عودة: ${latestReturnOdo.toLocaleString('en-US')} كم`
+                            : `Last return odometer: ${latestReturnOdo.toLocaleString('en-US')} km`)
+                        : altLastKnown != null
                         ? (isAr
                             ? `آخر قراءة معروفة: ${altLastKnown.toLocaleString('en-US')} كم`
                             : `Last known: ${altLastKnown.toLocaleString('en-US')} km`)

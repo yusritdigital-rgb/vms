@@ -41,6 +41,7 @@ const CASE_SELECT = `
   received_at, expected_completion_date, completed_at, delivered_at,
   workshop_id, workshop_name, workshop_city,
   vehicle_id, replacement_vehicle_id,
+  replacement_return_odometer, replacement_return_date, replacement_return_notes,
   complaint_description, internal_notes,
   entry_odometer, exit_odometer,
   created_at, last_updated_at, last_updated_by,
@@ -56,6 +57,7 @@ const CASE_SELECT_BARE = `
   received_at, expected_completion_date, completed_at, delivered_at,
   workshop_id, workshop_name, workshop_city,
   vehicle_id, replacement_vehicle_id,
+  replacement_return_odometer, replacement_return_date, replacement_return_notes,
   complaint_description, internal_notes,
   entry_odometer, exit_odometer,
   created_at, last_updated_at, last_updated_by,
@@ -261,6 +263,8 @@ export async function createCase(input: CreateCaseInput): Promise<CaseRow> {
     }
   }
 
+  const { data: { user } } = await supabase.auth.getUser()
+
   const payload: Record<string, any> = {
     vehicle_id:              input.vehicle_id,
     type:                    input.type,
@@ -277,6 +281,7 @@ export async function createCase(input: CreateCaseInput): Promise<CaseRow> {
     replacement_vehicle_id:  input.replacement_vehicle_id,
     no_replacement_reason:   input.no_replacement_reason,
     no_replacement_reason_custom: input.no_replacement_reason_custom,
+    last_updated_by:        user?.id ?? null,
   }
 
   const { data, error } = await supabase
@@ -291,7 +296,6 @@ export async function createCase(input: CreateCaseInput): Promise<CaseRow> {
   // ─── Seed odometer readings (best-effort) ───
   // Skip silently if the readings table doesn't exist yet (migration 021
   // not applied). On other errors, log but don't fail the case create.
-  const { data: { user } } = await supabase.auth.getUser()
   const readings: Array<Record<string, any>> = []
   readings.push({
     vehicle_id:  input.vehicle_id,
@@ -389,6 +393,15 @@ export async function assignReplacementVehicle(args: {
   
   if (existingReplacement) {
     return { ok: false, error: 'لا يمكن صرف هذه البديلة لأنها مرتبطة بحالة مفتوحة حالياً.' }
+  }
+
+  // Rule 3: Check if odometer is >= latest return odometer for this vehicle
+  const latestReturnOdo = await getLatestReplacementReturnOdometer(args.replacementVehicleId)
+  if (latestReturnOdo != null && args.replacementOdometer < latestReturnOdo) {
+    return { 
+      ok: false, 
+      error: `العداد أقل من آخر عداد عودة مسجل (${latestReturnOdo.toLocaleString('en-US')} كم)` 
+    }
   }
 
   const { error: upErr } = await supabase
@@ -542,9 +555,24 @@ export async function applyCaseUpdate(args: {
   /** YYYY-MM-DD, or null to skip writing. Optional — only the
    *  in-progress statuses require it (form-side rule). */
   expectedCompletionDate?: string | null
+  /** Exit odometer for main vehicle when closing the case */
+  exitOdometer?: number
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
+
+  // Validation: if closing a case with a replacement vehicle, check return odometer
+  if (isClosedStatus(args.newStatus) && !isClosedStatus(args.currentStatus)) {
+    const { data: caseData } = await supabase
+      .from('job_cards')
+      .select('replacement_vehicle_id, replacement_return_odometer')
+      .eq('id', args.caseId)
+      .maybeSingle()
+    
+    if (caseData && (caseData as any).replacement_vehicle_id && !(caseData as any).replacement_return_odometer) {
+      return { ok: false, error: 'لا يمكن إغلاق الحالة قبل تسجيل عداد عودة المركبة البديلة.' }
+    }
+  }
 
   let fullName: string | null = null
   if (user?.id) {
@@ -582,13 +610,16 @@ export async function applyCaseUpdate(args: {
 
   const statusChanged = args.newStatus !== args.currentStatus
   const dateProvided  = args.expectedCompletionDate !== undefined
-  if (statusChanged || dateProvided) {
+  if (statusChanged || dateProvided || args.exitOdometer !== undefined) {
     const patch: Record<string, any> = {}
     if (statusChanged) patch.status = args.newStatus
     if (dateProvided)  patch.expected_completion_date = args.expectedCompletionDate
+    if (args.exitOdometer !== undefined) patch.exit_odometer = args.exitOdometer
     if (statusChanged && isClosedStatus(args.newStatus)) {
       patch.completed_at = new Date().toISOString()
-      patch.replacement_vehicle_id = null
+      // Keep replacement_vehicle_id to preserve historical data for PDF generation
+      // The vehicle becomes available for other cases because listAvailableRvVehicles
+      // only excludes vehicles linked to OPEN cases
     }
     const { error: upErr } = await supabase
       .from('job_cards')
@@ -597,6 +628,107 @@ export async function applyCaseUpdate(args: {
     if (upErr) return { ok: false, error: upErr.message }
   }
   return { ok: true }
+}
+
+/**
+ * Record the return of a replacement vehicle.
+ *
+ * This function saves the return odometer, return date, and optional notes
+ * when the customer returns the replacement vehicle. The case must have
+ * a replacement vehicle assigned and must be open.
+ */
+export async function recordReplacementReturn(args: {
+  caseId: string
+  returnOdometer: number
+  returnDate: string  // ISO datetime
+  returnNotes?: string | null
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = createClient()
+
+  // Verify the case has a replacement vehicle and is open
+  const { data: caseData, error: readErr } = await supabase
+    .from('job_cards')
+    .select('id, status, replacement_vehicle_id')
+    .eq('id', args.caseId)
+    .maybeSingle()
+  
+  if (readErr) {
+    logPgError('[cases/queries] recordReplacementReturn: read failed', readErr, { caseId: args.caseId })
+    return { ok: false, error: readErr.message }
+  }
+  
+  if (!caseData) return { ok: false, error: 'case_not_found' }
+  if (isClosedStatus((caseData as any).status)) {
+    return { ok: false, error: 'case_closed' }
+  }
+  if (!(caseData as any).replacement_vehicle_id) {
+    return { ok: false, error: 'no_replacement_vehicle' }
+  }
+
+  // Update the case with return information
+  const { error: upErr } = await supabase
+    .from('job_cards')
+    .update({
+      replacement_return_odometer: args.returnOdometer,
+      replacement_return_date: args.returnDate,
+      replacement_return_notes: args.returnNotes || null,
+    })
+    .eq('id', args.caseId)
+  
+  if (upErr) {
+    logPgError('[cases/queries] recordReplacementReturn: update failed', upErr, { caseId: args.caseId })
+    return { ok: false, error: upErr.message }
+  }
+
+  // Record odometer reading for the replacement vehicle
+  const { data: { user } } = await supabase.auth.getUser()
+  const { error: readingErr } = await supabase
+    .from('vehicle_odometer_readings')
+    .insert({
+      vehicle_id: (caseData as any).replacement_vehicle_id,
+      reading: args.returnOdometer,
+      source: 'replacement_return',
+      case_id: args.caseId,
+      recorded_by: user?.id ?? null,
+    })
+  
+  if (readingErr && (readingErr as any).code !== '42P01') {
+    // Log but don't fail if readings table doesn't exist
+    logPgError('[cases/queries] recordReplacementReturn: reading insert failed', readingErr, {
+      caseId: args.caseId,
+    })
+  }
+
+  return { ok: true }
+}
+
+/**
+ * Get the latest return odometer for a replacement vehicle.
+ * This is used to set the default outgoing odometer when assigning
+ * the vehicle to a new case.
+ */
+export async function getLatestReplacementReturnOdometer(
+  vehicleId: string
+): Promise<number | null> {
+  const supabase = createClient()
+
+  // Find the most recent case where this vehicle was used as a replacement
+  // and has a return odometer recorded
+  const { data, error } = await supabase
+    .from('job_cards')
+    .select('replacement_return_odometer, replacement_return_date')
+    .eq('replacement_vehicle_id', vehicleId)
+    .not('replacement_return_odometer', 'is', null)
+    .order('replacement_return_date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    logPgError('[cases/queries] getLatestReplacementReturnOdometer failed', error, { vehicleId })
+    return null
+  }
+
+  return (data as any)?.replacement_return_odometer ?? null
 }
 
 /**
