@@ -11,9 +11,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, Eye, Edit3, FileDown, Loader2, FileText } from 'lucide-react'
+import { Plus, Search, Eye, Edit3, FileDown, Loader2, FileText, Trash2, FileSpreadsheet } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useTranslation } from '@/hooks/useTranslation'
+import { usePermissions } from '@/hooks/usePermissions'
 import {
   type Invoice,
   type InvoiceWithItems,
@@ -23,11 +24,13 @@ import {
 } from '@/lib/invoices/types'
 import { generateInvoicePDF } from '@/lib/pdf/invoice'
 import { askPdfLanguage } from '@/lib/pdf/shared'
+import { exportInvoicesToExcel } from '@/lib/excel/export'
 import { toast } from '@/components/ui/Toast'
 
 export default function InvoicesListPage() {
   const router = useRouter()
   const { language } = useTranslation()
+  const { isAdmin } = usePermissions()
   const [rows, setRows] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
@@ -95,6 +98,43 @@ export default function InvoicesListPage() {
     }
   }
 
+  const handleDelete = async (id: string) => {
+    if (!confirm(language === 'ar' ? 'هل أنت متأكد من حذف هذه الفاتورة؟' : 'Are you sure you want to delete this invoice?')) return
+    const supabase = createClient()
+    const { error } = await supabase.from('invoices').delete().eq('id', id)
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+    toast.success(language === 'ar' ? 'تم حذف الفاتورة' : 'Invoice deleted')
+    setRows(prev => prev.filter(r => r.id !== id))
+  }
+
+  const handleExcelExport = async () => {
+    try {
+      const supabase = createClient()
+      // Fetch all invoice items
+      const { data: items, error: itemsError } = await supabase
+        .from('invoice_items')
+        .select('*')
+      if (itemsError) throw itemsError
+
+      // Group items by invoice_id
+      const itemsByInvoice: Record<string, any[]> = {}
+      ;(items || []).forEach((item: any) => {
+        if (!itemsByInvoice[item.invoice_id]) {
+          itemsByInvoice[item.invoice_id] = []
+        }
+        itemsByInvoice[item.invoice_id].push(item)
+      })
+
+      exportInvoicesToExcel(rows, itemsByInvoice)
+      toast.success(language === 'ar' ? 'تم تصدير ملف Excel' : 'Excel exported successfully')
+    } catch (e: any) {
+      toast.error(e?.message || (language === 'ar' ? 'تعذر تصدير ملف Excel' : 'Excel export failed'))
+    }
+  }
+
   return (
     <div className="space-y-5" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       {/* Header */}
@@ -108,6 +148,13 @@ export default function InvoicesListPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleExcelExport}
+            className="px-3 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors inline-flex items-center gap-2"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            {language === 'ar' ? 'تصدير Excel' : 'Export Excel'}
+          </button>
           <Link
             href="/forms"
             className="px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors inline-flex items-center gap-2"
@@ -210,6 +257,15 @@ export default function InvoicesListPage() {
                         >
                           {exportingId === inv.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
                         </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleDelete(inv.id)}
+                            title={language === 'ar' ? 'حذف' : 'Delete'}
+                            className="p-1.5 rounded-md text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

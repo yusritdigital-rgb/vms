@@ -2,102 +2,133 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { Car, Wrench, ClipboardList, Receipt, Repeat, History, CalendarClock, LogIn, LayoutDashboard } from 'lucide-react'
+import { Car, ClipboardList, Receipt, Repeat, History, CalendarClock, LogIn, LayoutDashboard } from 'lucide-react'
 
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-white" dir="rtl">
 
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+      {/* Minimal Navbar */}
+      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Image src="/images/logo.png" alt="VMS" width={36} height={36} />
-            <span className="text-sm font-bold text-gray-800 tracking-wide">VMS</span>
+            <div className="relative w-9 h-9">
+              <Image src="/images/logo.png" alt="VMS" fill className="object-contain" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-bold text-gray-900 tracking-wide">VMS</span>
+              <span className="text-[10px] text-gray-400 font-medium">نظام مراقبة المركبات</span>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Link
-              href="/login"
-              className="flex items-center gap-1.5 px-4 py-2 bg-red-700 hover:bg-red-800 text-white rounded text-xs font-semibold transition-colors"
-            >
-              <LogIn className="w-3.5 h-3.5" />
-              تسجيل الدخول
-            </Link>
-            <Link
-              href="/login?mode=admin"
-              className="flex items-center gap-1.5 px-4 py-2 text-gray-600 hover:bg-gray-50 border border-gray-200 rounded text-xs font-semibold transition-colors"
-            >
-              <LayoutDashboard className="w-3.5 h-3.5" />
-              لوحة التحكم
-            </Link>
-          </div>
+          <Link
+            href="/login?mode=admin"
+            className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
+          >
+            لوحة التحكم
+          </Link>
         </div>
       </header>
 
-      {/* Hero — White background, large logo */}
-      <section className="bg-white">
-        <div className="max-w-6xl mx-auto px-6 pt-16 pb-14 md:pt-24 md:pb-20 flex flex-col items-center text-center">
-          <div className="relative w-44 h-44 md:w-56 md:h-56 mb-8">
-            <Image
-              src="/images/logo.png"
-              alt="VMS"
-              fill
-              className="object-contain"
-              priority
-            />
+      {/* Premium Hero with Geometric Elements */}
+      <section className="relative overflow-hidden bg-gradient-to-b from-gray-50 to-white">
+        {/* Geometric red line elements */}
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute top-0 right-0 w-px h-full bg-gradient-to-b from-transparent via-red-500/20 to-transparent" />
+          <div className="absolute top-0 left-0 w-px h-full bg-gradient-to-b from-transparent via-red-500/10 to-transparent" />
+          <div className="absolute top-1/4 right-1/4 w-32 h-px bg-red-500/20" />
+          <div className="absolute top-1/3 left-1/3 w-24 h-px bg-red-500/10" />
+          <div className="absolute bottom-1/4 right-1/3 w-20 h-px bg-red-500/15" />
+        </div>
+
+        <div className="relative max-w-7xl mx-auto px-6 py-24 md:py-32">
+          <div className="text-center max-w-3xl mx-auto">
+            {/* Logo */}
+            <div className="relative w-28 h-28 md:w-36 md:h-36 mx-auto mb-10">
+              <Image
+                src="/images/logo.png"
+                alt="VMS"
+                fill
+                className="object-contain"
+                priority
+              />
+            </div>
+
+            {/* Title */}
+            <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-gray-900 mb-6 leading-tight tracking-tight">
+              نظام مراقبة المركبات
+            </h1>
+
+            {/* Subtitle */}
+            <p className="text-sm md:text-base text-gray-400 tracking-[0.3em] font-semibold mb-8 uppercase">
+              Vehicle Management System
+            </p>
+
+            {/* Description */}
+            <p className="text-lg md:text-xl text-gray-600 leading-relaxed mb-12 max-w-2xl mx-auto font-light">
+              منصة متكاملة لإدارة الأسطول، الحالات، المواعيد، الفوترة، والمركبات البديلة
+            </p>
+
+            {/* Single CTA */}
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-3 px-10 py-4 text-base font-semibold bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
+            >
+              <LogIn className="w-5 h-5" />
+              تسجيل الدخول
+            </Link>
           </div>
-          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-3 leading-snug">
-            نظام مراقبة المركبات
-          </h1>
-          <p className="text-sm text-gray-400 tracking-widest font-medium mb-3">
-            VEHICLE MANAGEMENT SYSTEM
-          </p>
-          <div className="w-12 h-[2px] bg-red-600 rounded-full mb-5" />
-          <p className="text-sm text-gray-500 mb-0">
-            لوحة التحكم ومتابعة الأسطول
-          </p>
         </div>
       </section>
 
-      {/* Separator */}
-      <div className="border-t border-gray-200" />
+      {/* Services Section */}
+      <section className="py-24 bg-white">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">خدمات النظام</h2>
+            <div className="w-16 h-1 bg-red-600 mx-auto rounded-full" />
+          </div>
 
-      {/* Features */}
-      <section className="bg-gray-50 py-14">
-        <div className="max-w-6xl mx-auto px-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-1 text-center">خدمات النظام</h2>
-          <p className="text-xs text-gray-400 text-center mb-10">الوظائف الأساسية المتاحة عبر المنصة</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[
-              { icon: ClipboardList, title: 'الحالات',        desc: 'إنشاء ومتابعة الحالات والتحديث اليومي' },
-              { icon: CalendarClock, title: 'المواعيد',       desc: 'جدولة مواعيد الصيانة ومتابعة الحضور' },
-              { icon: Receipt,       title: 'الفوترة',        desc: 'إصدار وإدارة فواتير الصيانة والقطع' },
-              { icon: Repeat,        title: 'البدائل',        desc: 'إدارة مركبات مشروع RV والمصروفة كبديلة' },
-              { icon: Car,           title: 'قائمة المركبات', desc: 'تسجيل ومتابعة جميع مركبات الأسطول' },
-              { icon: History,       title: 'سجل الحالات',    desc: 'عرض الحالات المغلقة وتواريخ البدء والإغلاق' },
-            ].map((item, i) => (
-              <div key={i} className="bg-white border border-gray-200 rounded-lg p-5 hover:border-red-200 transition-colors">
-                <div className="w-9 h-9 bg-red-50 rounded-lg flex items-center justify-center mb-3">
-                  <item.icon className="w-4.5 h-4.5 text-red-700" />
+              { icon: ClipboardList, title: 'الحالات', desc: 'إدارة ومتابعة الحالات والتحديث اليومي' },
+              { icon: Car, title: 'المركبات', desc: 'تسجيل ومتابعة جميع مركبات الأسطول' },
+              { icon: CalendarClock, title: 'المواعيد', desc: 'جدولة مواعيد الصيانة ومتابعة الحضور' },
+              { icon: Receipt, title: 'الفوترة', desc: 'إصدار وإدارة فواتير الصيانة والقطع' },
+              { icon: Repeat, title: 'البدائل', desc: 'إدارة مركبات مشروع RV والمصروفة كبديلة' },
+              { icon: History, title: 'سجل الحالات', desc: 'عرض الحالات المغلقة وتواريخ البدء والإغلاق' },
+            ].map((service, i) => (
+              <div
+                key={i}
+                className="group relative bg-white rounded-2xl p-8 border border-gray-100 hover:border-red-200 hover:shadow-2xl transition-all duration-500"
+              >
+                {/* Geometric accent */}
+                <div className="absolute top-0 right-0 w-1 h-full bg-gradient-to-b from-red-500 to-red-600 rounded-r-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                
+                <div className="w-16 h-16 bg-gradient-to-br from-red-50 to-red-100 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-500">
+                  <service.icon className="w-8 h-8 text-red-600" />
                 </div>
-                <h3 className="text-sm font-bold text-gray-900 mb-1">{item.title}</h3>
-                <p className="text-xs text-gray-400 leading-relaxed">{item.desc}</p>
+                <h3 className="text-xl font-bold text-gray-900 mb-3">{service.title}</h3>
+                <p className="text-sm text-gray-500 leading-relaxed">{service.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-200">
-        <div className="max-w-6xl mx-auto px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Image src="/images/logo.png" alt="VMS" width={20} height={20} />
-            <span className="text-[11px] font-bold text-gray-600">VMS</span>
-            <span className="text-[10px] text-gray-300 mx-1">|</span>
-            <span className="text-[10px] text-gray-400">نظام مراقبة المركبات</span>
+      {/* Minimal Footer */}
+      <footer className="bg-gray-50 border-t border-gray-100">
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="relative w-8 h-8">
+                <Image src="/images/logo.png" alt="VMS" fill className="object-contain" />
+              </div>
+              <span className="text-sm font-semibold text-gray-900">VMS</span>
+            </div>
+            <p className="text-xs text-gray-400">
+              © {new Date().getFullYear()} نظام مراقبة المركبات
+            </p>
           </div>
-          <p className="text-[10px] text-gray-300">جميع الحقوق محفوظة</p>
         </div>
       </footer>
     </div>

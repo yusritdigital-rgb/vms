@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useTranslation } from '@/hooks/useTranslation'
+import { usePermissions } from '@/hooks/usePermissions'
 import AppointmentModal from '@/components/appointments/AppointmentModal'
 import {
   type Appointment,
@@ -31,6 +32,7 @@ import { toast } from '@/components/ui/Toast'
 
 export default function AppointmentsListPage() {
   const { language } = useTranslation()
+  const { isAdmin } = usePermissions()
   const [rows, setRows] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
@@ -165,6 +167,7 @@ export default function AppointmentsListPage() {
                 <AppointmentCard
                   key={a.id}
                   a={a}
+                  isAdmin={isAdmin}
                   onEdit={() => { setEditing(a); setModalOpen(true) }}
                   onDelete={() => handleDelete(a.id)}
                   onStatus={(s: AppointmentStatus) => updateStatus(a, s)}
@@ -194,9 +197,10 @@ export default function AppointmentsListPage() {
 // (معاينة / إلغاء) for operational convenience.
 // ═══════════════════════════════════════════════════════════════════════════
 function AppointmentCard({
-  a, onEdit, onDelete, onStatus,
+  a, isAdmin, onEdit, onDelete, onStatus,
 }: {
   a: Appointment
+  isAdmin: boolean
   onEdit: () => void
   onDelete: () => void
   onStatus: (s: AppointmentStatus) => void
@@ -308,20 +312,26 @@ function AppointmentCard({
           onClick={() => onStatus('cancelled')}
         />
         <div className="flex-1" />
-        <button
-          onClick={onEdit}
-          title="تعديل"
-          className="p-1.5 rounded-md text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-        >
-          <Pencil className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={onDelete}
-          title="حذف"
-          className="p-1.5 rounded-md text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+        {/* Edit button: only available for non-completed appointments or for admins */}
+        {(a.status === 'scheduled' || isAdmin) && (
+          <button
+            onClick={onEdit}
+            title="تعديل"
+            className="p-1.5 rounded-md text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        )}
+        {/* Delete button: admin only */}
+        {isAdmin && (
+          <button
+            onClick={onDelete}
+            title="حذف"
+            className="p-1.5 rounded-md text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     </div>
   )

@@ -11,10 +11,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, Eye, FileDown, Loader2, FileText, Shield } from 'lucide-react'
+import { Plus, Search, Eye, FileDown, Loader2, FileText, Shield, Trash2, FileSpreadsheet } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useTranslation } from '@/hooks/useTranslation'
 import { useRole } from '@/hooks/useRole'
+import { usePermissions } from '@/hooks/usePermissions'
 import {
   type MisuseRegistration,
   type MisuseRegistrationWithItems,
@@ -22,12 +23,14 @@ import {
 } from '@/lib/misuse/types'
 import { generateMisusePDF } from '@/lib/pdf/misuse'
 import { askPdfLanguage } from '@/lib/pdf/shared'
+import { exportMisuseToExcel } from '@/lib/excel/export'
 import { toast } from '@/components/ui/Toast'
 
 export default function MisuseListPage() {
   const router = useRouter()
   const { language } = useTranslation()
   const { role, loading: roleLoading, isCompanyManager } = useRole()
+  const { isAdmin } = usePermissions()
 
   const [rows, setRows] = useState<MisuseRegistration[]>([])
   const [loading, setLoading] = useState(true)
@@ -97,6 +100,50 @@ export default function MisuseListPage() {
     }
   }
 
+  const handleDelete = async (id: string) => {
+    if (!confirm(language === 'ar' ? 'هل أنت متأكد من حذف هذا السجل؟' : 'Are you sure you want to delete this record?')) return
+    const supabase = createClient()
+    const { error } = await supabase.from('misuse_registrations').delete().eq('id', id)
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+    toast.success(language === 'ar' ? 'تم حذف السجل' : 'Record deleted')
+    setRows(prev => prev.filter(r => r.id !== id))
+  }
+
+  const handleExcelExport = async () => {
+    try {
+      const supabase = createClient()
+      // Fetch all labor and spare part items
+      const [{ data: labor }, { data: parts }] = await Promise.all([
+        supabase.from('misuse_labor_items').select('*'),
+        supabase.from('misuse_spare_part_items').select('*'),
+      ])
+
+      // Group items by misuse_id
+      const laborByMisuse: Record<string, any[]> = {}
+      const partsByMisuse: Record<string, any[]> = {}
+      ;(labor || []).forEach((item: any) => {
+        if (!laborByMisuse[item.misuse_id]) {
+          laborByMisuse[item.misuse_id] = []
+        }
+        laborByMisuse[item.misuse_id].push(item)
+      })
+      ;(parts || []).forEach((item: any) => {
+        if (!partsByMisuse[item.misuse_id]) {
+          partsByMisuse[item.misuse_id] = []
+        }
+        partsByMisuse[item.misuse_id].push(item)
+      })
+
+      exportMisuseToExcel(rows, laborByMisuse, partsByMisuse)
+      toast.success(language === 'ar' ? 'تم تصدير ملف Excel' : 'Excel exported successfully')
+    } catch (e: any) {
+      toast.error(e?.message || (language === 'ar' ? 'تعذر تصدير ملف Excel' : 'Excel export failed'))
+    }
+  }
+
   if (roleLoading || !isCompanyManager) {
     return (
       <div className="p-10 text-center text-gray-400">
@@ -125,6 +172,13 @@ export default function MisuseListPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleExcelExport}
+            className="px-3 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors inline-flex items-center gap-2"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            {language === 'ar' ? 'تصدير Excel' : 'Export Excel'}
+          </button>
           <Link
             href="/forms"
             className="px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors inline-flex items-center gap-2"
@@ -211,6 +265,15 @@ export default function MisuseListPage() {
                         >
                           {exportingId === mu.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
                         </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleDelete(mu.id)}
+                            title={language === 'ar' ? 'حذف' : 'Delete'}
+                            className="p-1.5 rounded-md text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
