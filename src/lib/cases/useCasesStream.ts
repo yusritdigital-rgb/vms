@@ -72,10 +72,12 @@ export function useCasesStream(): UseCasesStream {
     const supabase = createClient()
 
     // 1st attempt — with embed.
+    // Sort by received_at ascending (oldest first) for open cases
     const primary = await supabase
       .from('job_cards')
       .select(CASE_SELECT)
-      .order('created_at', { ascending: false })
+      .order('received_at', { ascending: true })
+      .order('created_at', { ascending: true })
       .limit(2000)
 
     if (!mountedRef.current) return
@@ -94,10 +96,12 @@ export function useCasesStream(): UseCasesStream {
     console.log('[cases error]', primary.error)
 
     // 2nd attempt — bare, no joins.
+    // Sort by received_at ascending (oldest first) for open cases
     const bare = await supabase
       .from('job_cards')
       .select(CASE_SELECT_BARE)
-      .order('created_at', { ascending: false })
+      .order('received_at', { ascending: true })
+      .order('created_at', { ascending: true })
       .limit(2000)
 
     if (!mountedRef.current) return

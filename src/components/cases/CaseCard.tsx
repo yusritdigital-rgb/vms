@@ -33,6 +33,10 @@ export default function CaseCard({ c, isAr, highlight, onSaved }: Props) {
     : due?.tone === 'near'  ? 'text-orange-600 dark:text-orange-400 font-semibold'
     :                         'text-gray-500 dark:text-gray-400'
 
+  // Calculate progress bar width (max 30 days for full bar)
+  const daysProgress = Math.min((days || 0) / 30, 1) * 100
+  const daysColor = (days || 0) > 7 ? 'bg-red-500' : (days || 0) > 3 ? 'bg-orange-500' : 'bg-emerald-500'
+
   return (
     <div
       id={`case-${c.id}`}
@@ -73,19 +77,6 @@ export default function CaseCard({ c, isAr, highlight, onSaved }: Props) {
                 {due.text}
               </span>
             )}
-            {days !== null && (
-              <span
-                title={isAr ? 'عدد الأيام في الورشة' : 'Days in workshop'}
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] ${
-                  days > 3
-                    ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                }`}
-              >
-                <Clock className="w-3 h-3" />
-                {isAr ? `${days} يوم في الورشة` : `${days}d in shop`}
-              </span>
-            )}
             {last && (
               <span
                 title={isAr ? 'آخر تحديث' : 'Last update'}
@@ -98,9 +89,26 @@ export default function CaseCard({ c, isAr, highlight, onSaved }: Props) {
           </div>
         </div>
 
-        <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${badge} whitespace-nowrap`}>
-          {c.status}
-        </span>
+        <div className="flex flex-col items-end gap-2">
+          <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${badge} whitespace-nowrap`}>
+            {c.status}
+          </span>
+          {/* Days progress bar */}
+          {days !== null && (
+            <div className="flex flex-col items-end gap-1 min-w-[120px]">
+              <div className="flex items-center gap-2 text-[11px] text-gray-600 dark:text-gray-400">
+                <Clock className="w-3 h-3" />
+                <span className="font-semibold">{isAr ? `${days} يوم` : `${days}d`}</span>
+              </div>
+              <div className="w-full h-2 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                <div
+                  className={`h-full ${daysColor} transition-all duration-300`}
+                  style={{ width: `${daysProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Complaint summary (optional) */}
