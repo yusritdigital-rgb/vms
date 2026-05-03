@@ -12,8 +12,6 @@ import {
   Users,
   Car,
   ClipboardList,
-  Package,
-  BarChart3,
   LogOut,
   Loader2,
   Home,
@@ -34,8 +32,6 @@ const navItems = [
   { key: 'vehicles',   href: '/admin-dashboard/vehicles',    label: 'المركبات',          labelEn: 'Vehicles',            icon: Car },
   { key: 'upload',     href: '/admin-dashboard/upload',      label: 'رفع المركبات',      labelEn: 'Import Vehicles',     icon: Upload },
   { key: 'job-cards',  href: '/admin-dashboard/job-cards',   label: 'الحالات',           labelEn: 'Cases',               icon: ClipboardList },
-  { key: 'spare-parts',href: '/admin-dashboard/spare-parts', label: 'قطع الغيار',        labelEn: 'Spare Parts',         icon: Package },
-  { key: 'reports',    href: '/admin-dashboard/reports',     label: 'التقارير',          labelEn: 'Reports',             icon: BarChart3 },
   { key: 'data-export',href: '/admin-dashboard/data-export', label: 'تحميل البيانات',    labelEn: 'Data Export',         icon: Download },
   { key: 'settings',   href: '/admin-dashboard/settings',    label: 'إعدادات النظام',    labelEn: 'System Settings',     icon: Settings },
 ]

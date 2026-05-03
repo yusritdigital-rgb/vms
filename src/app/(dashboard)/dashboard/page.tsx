@@ -157,7 +157,7 @@ export default function DashboardPage() {
 
     try {
       const now = new Date()
-      const threeDaysMs = 3 * 24 * 60 * 60 * 1000
+      const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000
       // Local YYYY-MM-DD (appointments.scheduled_date is a DATE without TZ, so
       // comparing against UTC slice would mis-count near midnight in Riyadh).
       const pad = (n: number) => String(n).padStart(2, '0')
@@ -228,7 +228,7 @@ export default function DashboardPage() {
       const overdueOpenCases = cases.filter(c => {
         if (isClosed(c.status)) return false
         if (!c.received_at) return false
-        return now.getTime() - new Date(c.received_at).getTime() > threeDaysMs
+        return now.getTime() - new Date(c.received_at).getTime() > thirtyDaysMs
       }).length
 
       // Repair time = (completed_at || delivered_at) − received_at, in hours.
@@ -290,10 +290,10 @@ export default function DashboardPage() {
       // avoid duplicate-but-allowed pings every 30s; the API also dedups by
       // (company_id, type, reference_id) over 24h so this is layered defence.
       if (!silent && companyId) {
-        // Days-in-shop > 3 days (legacy `vehicle_overdue` channel).
+        // Days-in-shop > 30 days (legacy `vehicle_overdue` channel).
         cases
           .filter(c => !isClosed(c.status) && c.received_at &&
-                       now.getTime() - new Date(c.received_at).getTime() > threeDaysMs)
+                       now.getTime() - new Date(c.received_at).getTime() > thirtyDaysMs)
           .forEach((c) => {
             const days = Math.floor((now.getTime() - new Date(c.received_at!).getTime()) / (24 * 60 * 60 * 1000))
             const plate = c.vehicle?.plate_number ?? c.vehicle_id
@@ -393,8 +393,8 @@ export default function DashboardPage() {
               </h3>
               <p className="text-sm text-red-700 dark:text-red-300 mt-0.5">
                 {isAr
-                  ? `${n(stats.overdueOpenCases)} حالة مفتوحة منذ أكثر من 3 أيام`
-                  : `${stats.overdueOpenCases} open cases received more than 3 days ago`}
+                  ? `${n(stats.overdueOpenCases)} حالة مفتوحة منذ أكثر من 30 يوم`
+                  : `${stats.overdueOpenCases} open cases received more than 30 days ago`}
               </p>
             </div>
             <ChevronRight className={`w-5 h-5 text-red-600 ${isAr ? 'rotate-180' : ''}`} />

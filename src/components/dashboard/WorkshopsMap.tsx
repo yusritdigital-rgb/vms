@@ -1,13 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, CircleMarker, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import MarkerClusterGroup from 'react-leaflet-cluster'
 import { createClient } from '@/lib/supabase/client'
-import { Loader2, MapPin } from 'lucide-react'
+import { Loader2, MapPin, Layers } from 'lucide-react'
 
 interface WorkshopWithCounts {
   id: string
@@ -109,6 +109,7 @@ export default function WorkshopsMap({ language = 'ar' }: WorkshopsMapProps) {
   const [workshops, setWorkshops] = useState<WorkshopWithCounts[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<'markers' | 'heatmap'>('markers')
 
   const isAr = language === 'ar'
 
@@ -290,7 +291,30 @@ export default function WorkshopsMap({ language = 'ar' }: WorkshopsMapProps) {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {/* View Toggle */}
+            <div className="flex items-center bg-gray-100 dark:bg-slate-800 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('markers')}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  viewMode === 'markers'
+                    ? 'bg-white dark:bg-slate-700 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                {isAr ? 'العلامات' : 'Markers'}
+              </button>
+              <button
+                onClick={() => setViewMode('heatmap')}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  viewMode === 'heatmap'
+                    ? 'bg-white dark:bg-slate-700 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                {isAr ? 'خريطة الحرارة' : 'Heatmap'}
+              </button>
+            </div>
             <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
               {workshops.length} {isAr ? 'ورشة' : 'workshops'}
             </span>
@@ -302,24 +326,49 @@ export default function WorkshopsMap({ language = 'ar' }: WorkshopsMapProps) {
           <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">
             {isAr ? 'المؤشر:' : 'Legend:'}
           </span>
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded-full bg-gray-500" />
-            <span className="text-xs text-gray-600 dark:text-gray-400">
-              {isAr ? 'ورشة' : 'Workshop'}
-            </span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded-full bg-teal-600" />
-            <span className="text-xs text-gray-600 dark:text-gray-400">
-              {isAr ? 'حالات مفتوحة' : 'Open cases'}
-            </span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded-full bg-red-600" />
-            <span className="text-xs text-gray-600 dark:text-gray-400">
-              {isAr ? 'حالات متأخرة' : 'Delayed cases'}
-            </span>
-          </div>
+          {viewMode === 'markers' ? (
+            <>
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 rounded-full bg-gray-500" />
+                <span className="text-xs text-gray-600 dark:text-gray-400">
+                  {isAr ? 'ورشة' : 'Workshop'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 rounded-full bg-teal-600" />
+                <span className="text-xs text-gray-600 dark:text-gray-400">
+                  {isAr ? 'حالات مفتوحة' : 'Open cases'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 rounded-full bg-red-600" />
+                <span className="text-xs text-gray-600 dark:text-gray-400">
+                  {isAr ? 'حالات متأخرة' : 'Delayed cases'}
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 rounded-full bg-green-500" />
+                <span className="text-xs text-gray-600 dark:text-gray-400">
+                  {isAr ? 'منخفض' : 'Low'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 rounded-full bg-yellow-500" />
+                <span className="text-xs text-gray-600 dark:text-gray-400">
+                  {isAr ? 'متوسط' : 'Medium'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 rounded-full bg-red-500" />
+                <span className="text-xs text-gray-600 dark:text-gray-400">
+                  {isAr ? 'عالي' : 'High'}
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -334,63 +383,121 @@ export default function WorkshopsMap({ language = 'ar' }: WorkshopsMapProps) {
             attribution='&copy; OpenStreetMap contributors &copy; CARTO'
             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
           />
-          <MarkerClusterGroup
-            chunkedLoading
-            maxClusterRadius={50}
-            showCoverageOnHover={false}
-            spiderfyOnMaxZoom={true}
-            zoomToBoundsOnClick={true}
-          >
-            {workshops.map((workshop) => (
-              <Marker
-                key={workshop.id}
-                position={[workshop.latitude, workshop.longitude]}
-                icon={getMarkerIcon(workshop.open_cases, workshop.delayed_cases)}
-              >
-                <Popup>
-                  <div className="text-sm" style={{ minWidth: '240px', direction: 'rtl' }}>
-                    <div className="font-bold text-gray-900 dark:text-white text-base mb-2 pb-2 border-b border-gray-200 dark:border-slate-700">
-                      {workshop.workshop_name_ar}
+          
+          {viewMode === 'markers' ? (
+            <MarkerClusterGroup
+              chunkedLoading
+              maxClusterRadius={50}
+              showCoverageOnHover={false}
+              spiderfyOnMaxZoom={true}
+              zoomToBoundsOnClick={true}
+            >
+              {workshops.map((workshop) => (
+                <Marker
+                  key={workshop.id}
+                  position={[workshop.latitude, workshop.longitude]}
+                  icon={getMarkerIcon(workshop.open_cases, workshop.delayed_cases)}
+                >
+                  <Popup>
+                    <div className="text-sm" style={{ minWidth: '240px', direction: 'rtl' }}>
+                      <div className="font-bold text-gray-900 dark:text-white text-base mb-2 pb-2 border-b border-gray-200 dark:border-slate-700">
+                        {workshop.workshop_name_ar}
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600 dark:text-gray-400 text-xs">
+                            {isAr ? 'المدينة' : 'City'}
+                          </span>
+                          <span className="font-semibold text-gray-900 dark:text-white text-xs">
+                            {workshop.city_ar || '—'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600 dark:text-gray-400 text-xs">
+                            {isAr ? 'إجمالي الحالات' : 'Total Cases'}
+                          </span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300">
+                            {workshop.total_cases}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600 dark:text-gray-400 text-xs">
+                            {isAr ? 'الحالات المفتوحة' : 'Open Cases'}
+                          </span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300">
+                            {workshop.open_cases}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600 dark:text-gray-400 text-xs">
+                            {isAr ? 'الحالات المتأخرة' : 'Delayed Cases'}
+                          </span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">
+                            {workshop.delayed_cases}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600 dark:text-gray-400 text-xs">
-                          {isAr ? 'المدينة' : 'City'}
-                        </span>
-                        <span className="font-semibold text-gray-900 dark:text-white text-xs">
-                          {workshop.city_ar || '—'}
-                        </span>
+                  </Popup>
+                </Marker>
+              ))}
+            </MarkerClusterGroup>
+          ) : (
+            // Heatmap view using CircleMarker with gradient colors
+            <>
+              {workshops.map((workshop) => {
+                const maxCases = Math.max(...workshops.map(w => w.total_cases), 1)
+                const intensity = workshop.total_cases / maxCases
+                const radius = 10 + (intensity * 30) // 10-40km radius
+                const opacity = 0.3 + (intensity * 0.4) // 0.3-0.7 opacity
+                
+                // Color gradient: green -> yellow -> red
+                let color = '#22c55e' // green
+                if (intensity > 0.33) color = '#eab308' // yellow
+                if (intensity > 0.66) color = '#ef4444' // red
+                
+                return (
+                  <CircleMarker
+                    key={workshop.id}
+                    center={[workshop.latitude, workshop.longitude]}
+                    radius={radius}
+                    pathOptions={{
+                      color: color,
+                      fillColor: color,
+                      fillOpacity: opacity,
+                      weight: 0,
+                    }}
+                  >
+                    <Popup>
+                      <div className="text-sm" style={{ minWidth: '240px', direction: 'rtl' }}>
+                        <div className="font-bold text-gray-900 dark:text-white text-base mb-2 pb-2 border-b border-gray-200 dark:border-slate-700">
+                          {workshop.workshop_name_ar}
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-600 dark:text-gray-400 text-xs">
+                              {isAr ? 'المدينة' : 'City'}
+                            </span>
+                            <span className="font-semibold text-gray-900 dark:text-white text-xs">
+                              {workshop.city_ar || '—'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-600 dark:text-gray-400 text-xs">
+                              {isAr ? 'إجمالي الحالات' : 'Total Cases'}
+                            </span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300">
+                              {workshop.total_cases}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600 dark:text-gray-400 text-xs">
-                          {isAr ? 'إجمالي الحالات' : 'Total Cases'}
-                        </span>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300">
-                          {workshop.total_cases}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600 dark:text-gray-400 text-xs">
-                          {isAr ? 'الحالات المفتوحة' : 'Open Cases'}
-                        </span>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300">
-                          {workshop.open_cases}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-600 dark:text-gray-400 text-xs">
-                          {isAr ? 'الحالات المتأخرة' : 'Delayed Cases'}
-                        </span>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">
-                          {workshop.delayed_cases}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
-          </MarkerClusterGroup>
+                    </Popup>
+                  </CircleMarker>
+                )
+              })}
+            </>
+          )}
         </MapContainer>
       </div>
     </div>

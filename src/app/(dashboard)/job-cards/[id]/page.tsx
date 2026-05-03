@@ -14,7 +14,7 @@ import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import {
   ArrowLeft, Car, Loader2, Wrench, Briefcase, StickyNote, ClipboardList, Gauge, Calendar, CheckCircle,
-  UserCircle, Clock, Printer, Trash2,
+  UserCircle, Clock, Printer, Trash2, Edit2,
 } from 'lucide-react'
 
 import { useTranslation } from '@/hooks/useTranslation'
@@ -27,6 +27,8 @@ import { STATUS_COLOR } from '@/lib/cases/statuses'
 import { daysUntil, fmtDate, fmtDateTime } from '@/lib/cases/formatCase'
 import { toast } from '@/components/ui/Toast'
 import { AlertTriangle, Check, Pencil, X } from 'lucide-react'
+import { createNotification } from '@/lib/notifications/queries'
+import { WORKSHOPS, findWorkshopById } from '@/lib/workshops/workshops'
 
 import CaseUpdateForm        from '@/components/cases/CaseUpdateForm'
 import CaseTimeline          from '@/components/cases/CaseTimeline'
@@ -59,6 +61,7 @@ export default function CaseDetailPage() {
   const [updaterName, setUpdaterName] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [timelineKey, setTimelineKey] = useState(0)
+  const [showWorkshopModal, setShowWorkshopModal] = useState(false)
 
   const reload = useCallback(async () => {
     const row = await getCase(params.id)
@@ -211,6 +214,43 @@ export default function CaseDetailPage() {
     }
     toast.success(isAr ? 'تم حذف الحالة' : 'Case deleted')
     router.push('/job-cards')
+  }
+
+  const handleWorkshopChange = async (newWorkshopId: string) => {
+    const newWorkshop = findWorkshopById(newWorkshopId)
+    if (!newWorkshop) return
+
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('job_cards')
+      .update({
+        workshop_name: newWorkshop.name_ar,
+        workshop_city: newWorkshop.city_ar,
+      })
+      .eq('id', c.id)
+
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+
+    // Create notification for workshop transfer
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      await createNotification({
+        userId: user.id,
+        type: 'workshop_transfer',
+        title: isAr ? 'نقل ورشة' : 'Workshop Transfer',
+        message: isAr 
+          ? `تم نقل السيارة ${c.vehicle?.plate_number} من ${c.workshop_name} إلى ${newWorkshop.name_ar}`
+          : `Vehicle ${c.vehicle?.plate_number} transferred from ${c.workshop_name} to ${newWorkshop.name_ar}`,
+        caseId: c.id,
+      })
+    }
+
+    toast.success(isAr ? 'تم تغيير الورشة' : 'Workshop changed')
+    setShowWorkshopModal(false)
+    reload()
   }
 
   return (
@@ -372,6 +412,15 @@ export default function CaseDetailPage() {
         <InfoBlock title={isAr ? 'الورشة' : 'Workshop'} icon={<Wrench className="w-4 h-4" />}>
           <Row k={isAr ? 'الاسم' : 'Name'} v={c.workshop_name ?? '—'} />
           <Row k={isAr ? 'المدينة' : 'City'} v={c.workshop_city ?? '—'} />
+          {!closed && (
+            <button
+              onClick={() => setShowWorkshopModal(true)}
+              className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+              {isAr ? 'تغيير الورشة' : 'Change Workshop'}
+            </button>
+          )}
         </InfoBlock>
 
         {/* Timing */}
@@ -469,13 +518,50 @@ export default function CaseDetailPage() {
         <h2 className="font-semibold text-gray-900 dark:text-white mb-3">
           {isAr ? 'سجل التحديثات' : 'Update timeline'}
         </h2>
-        <CaseTimeline key={timelineKey} caseId={c.id} language={isAr ? 'ar' : 'en'} />
+        <CaseTimeline caseId={c.id} key={timelineKey} language={isAr ? 'ar' : 'en'} />
       </section>
+
+      {/* Workshop Change Modal */}
+      {showWorkshopModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 shadow-xl max-w-md w-full max-h-[80vh] overflow-hidden">
+            <div className="p-4 border-b border-gray-200 dark:border-slate-700">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                {isAr ? 'تغيير الورشة' : 'Change Workshop'}
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                {isAr ? 'اختر الورشة الجديدة' : 'Select new workshop'}
+              </p>
+            </div>
+            <div className="p-4 overflow-y-auto max-h-[60vh]">
+              <div className="space-y-2">
+                {WORKSHOPS.map((workshop) => (
+                  <button
+                    key={workshop.id}
+                    onClick={() => handleWorkshopChange(workshop.id)}
+                    className="w-full text-start px-4 py-3 rounded-lg border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
+                  >
+                    <div className="font-medium text-gray-900 dark:text-white">{workshop.name_ar}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">{workshop.city_ar}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-200 dark:border-slate-700">
+              <button
+                onClick={() => setShowWorkshopModal(false)}
+                className="w-full px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-slate-800 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+              >
+                {isAr ? 'إلغاء' : 'Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-// ─── tiny building blocks ───
 function InfoBlock({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-4">

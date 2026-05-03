@@ -11,6 +11,7 @@ import { createClient } from '@/lib/supabase/client'
 import { CLOSED_STATUSES } from './statuses'
 import type { CaseRow, CaseUpdateRow } from './types'
 import { isClosedStatus } from './types'
+import { createNotification } from '@/lib/notifications/queries'
 
 // ─────────────────────────────────────────────────────
 // Error logging helper
@@ -626,8 +627,90 @@ export async function applyCaseUpdate(args: {
       .update(patch)
       .eq('id', args.caseId)
     if (upErr) return { ok: false, error: upErr.message }
+
+    // Create notifications for status changes
+    if (statusChanged && user?.id) {
+      const { data: caseData } = await supabase
+        .from('job_cards')
+        .select('job_card_number, vehicle:vehicles(plate_number)')
+        .eq('id', args.caseId)
+        .maybeSingle()
+
+      const caseNum = (caseData as any)?.job_card_number
+      const plate = (caseData as any)?.vehicle?.plate_number
+
+      // Notification for "جاهزة" status (expires in 24 hours)
+      if (args.newStatus === 'جاهزة') {
+        const expiresAt = new Date()
+        expiresAt.setHours(expiresAt.getHours() + 24)
+        await createNotification({
+          userId: user.id,
+          type: 'case_ready',
+          title: 'سيارة جاهزة',
+          message: `السيارة ${plate} (${caseNum}) جاهزة للاستلام`,
+          caseId: args.caseId,
+          expiresAt,
+        })
+      }
+
+      // Notification for "تم التسليم للعميل" status
+      if (args.newStatus === 'تم التسليم للعميل') {
+        await createNotification({
+          userId: user.id,
+          type: 'case_delivered',
+          title: 'تم التسليم',
+          message: `تم تسليم السيارة ${plate} (${caseNum}) للعميل`,
+          caseId: args.caseId,
+        })
+      }
+    }
   }
   return { ok: true }
+}
+
+/**
+ * Check for overdue cases (>30 days in shop) and create notifications.
+ * This should be called periodically (e.g., daily via cron or on page load).
+ */
+export async function checkOverdueCases(): Promise<void> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
+
+  const thirtyDaysAgo = new Date()
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+  const { data: overdueCases } = await supabase
+    .from('job_cards')
+    .select('id, job_card_number, received_at, vehicle:vehicles(plate_number)')
+    .lt('received_at', thirtyDaysAgo.toISOString())
+    .not('status', 'in', `(${CLOSED_STATUSES.map(s => `"${s}"`).join(',')})`)
+    .limit(100)
+
+  if (!overdueCases) return
+
+  for (const c of overdueCases as any[]) {
+    const daysInShop = Math.floor((Date.now() - new Date(c.received_at).getTime()) / (1000 * 60 * 60 * 24))
+    
+    // Create notification if not already created recently (check existing notifications)
+    const { data: existingNotif } = await supabase
+      .from('notifications')
+      .select('id')
+      .eq('case_id', c.id)
+      .eq('type', 'case_overdue')
+      .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+      .maybeSingle()
+
+    if (!existingNotif) {
+      await createNotification({
+        userId: user.id,
+        type: 'case_overdue',
+        title: 'تأخير سيارة',
+        message: `السيارة ${c.vehicle?.plate_number} (${c.job_card_number}) متأخرة ${daysInShop} يوم`,
+        caseId: c.id,
+      })
+    }
+  }
 }
 
 /**

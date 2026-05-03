@@ -1,31 +1,20 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Bell, CheckCheck, Clock, Wrench, Package, Car, AlertTriangle, FileText } from 'lucide-react'
+import { Bell, CheckCheck, Clock, CheckCircle, AlertTriangle, ArrowRightLeft, X } from 'lucide-react'
 import { useTranslation } from '@/hooks/useTranslation'
-import { useCompanyId } from '@/hooks/useCompany'
+import { createClient } from '@/lib/supabase/client'
+import { getUnreadNotifications, markNotificationAsRead, markAllAsRead, deleteNotification } from '@/lib/notifications/queries'
+import type { Notification } from '@/lib/notifications/types'
+import { NOTIFICATION_LABELS, NOTIFICATION_ICONS } from '@/lib/notifications/types'
 import Link from 'next/link'
 
-interface Notification {
-  id: string
-  company_id: string
-  type: string
-  title_ar: string
-  title_en: string
-  body_ar: string | null
-  body_en: string | null
-  reference_id: string | null
-  is_read: boolean
-  created_at: string
-}
-
 const typeIcons: Record<string, { Icon: any; color: string }> = {
-  new_job_card: { Icon: FileText, color: 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' },
-  job_card_delivered: { Icon: CheckCheck, color: 'text-red-500 bg-red-50 dark:bg-red-900/20' },
-  vehicle_overdue: { Icon: AlertTriangle, color: 'text-red-500 bg-red-50 dark:bg-red-900/20' },
-  low_stock: { Icon: Package, color: 'text-amber-500 bg-amber-50 dark:bg-amber-900/20' },
-  vehicle_received: { Icon: Car, color: 'text-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' },
-  general: { Icon: Bell, color: 'text-gray-500 bg-gray-50 dark:bg-gray-900/20' },
+  case_ready: { Icon: CheckCircle, color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' },
+  case_delivered: { Icon: CheckCircle, color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' },
+  case_overdue: { Icon: AlertTriangle, color: 'text-red-500 bg-red-50 dark:bg-red-900/20' },
+  workshop_transfer: { Icon: ArrowRightLeft, color: 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' },
+  other: { Icon: Bell, color: 'text-gray-500 bg-gray-50 dark:bg-gray-900/20' },
 }
 
 function timeAgo(dateStr: string, lang: string): string {
@@ -35,25 +24,24 @@ function timeAgo(dateStr: string, lang: string): string {
   if (mins < 60) return lang === 'ar' ? `منذ ${mins} دقيقة` : `${mins}m ago`
   const hrs = Math.floor(mins / 60)
   if (hrs < 24) return lang === 'ar' ? `منذ ${hrs} ساعة` : `${hrs}h ago`
-  return lang === 'ar' ? 'منذ يوم' : '1d ago'
+  const days = Math.floor(hrs / 24)
+  return lang === 'ar' ? `منذ ${days} يوم` : `${days}d ago`
 }
 
 export default function NotificationBell() {
   const { language } = useTranslation()
-  const { companyId } = useCompanyId()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   const unreadCount = notifications.filter(n => !n.is_read).length
 
   useEffect(() => {
-    if (companyId) {
-      loadNotifications()
-      const interval = setInterval(loadNotifications, 30000)
-      return () => clearInterval(interval)
-    }
-  }, [companyId])
+    loadNotifications()
+    const interval = setInterval(loadNotifications, 30000)
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -64,45 +52,54 @@ export default function NotificationBell() {
   }, [])
 
   const loadNotifications = async () => {
-    if (!companyId) return
     try {
-      const res = await fetch(`/api/notifications?company_id=${companyId}`)
-      const data = await res.json()
-      if (data.notifications) setNotifications(data.notifications)
-    } catch {}
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const notifs = await getUnreadNotifications(user.id)
+      setNotifications(notifs)
+    } catch (error) {
+      console.error('[NotificationBell] loadNotifications failed:', error)
+    }
   }
 
   const markAllRead = async () => {
-    if (!companyId) return
     try {
-      await fetch('/api/notifications', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mark_all: true, company_id: companyId }),
-      })
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      await markAllAsRead(user.id)
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
-    } catch {}
+    } catch (error) {
+      console.error('[NotificationBell] markAllRead failed:', error)
+    }
   }
 
   const markRead = async (id: string) => {
     try {
-      await fetch('/api/notifications', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
-      })
+      await markNotificationAsRead(id)
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n))
-    } catch {}
+    } catch (error) {
+      console.error('[NotificationBell] markRead failed:', error)
+    }
+  }
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation()
+    try {
+      await deleteNotification(id)
+      setNotifications(prev => prev.filter(n => n.id !== id))
+    } catch (error) {
+      console.error('[NotificationBell] handleDelete failed:', error)
+    }
   }
 
   const getLink = (n: Notification) => {
-    if (n.type === 'new_job_card' || n.type === 'job_card_delivered' || n.type === 'vehicle_overdue' || n.type === 'vehicle_received') {
-      return n.reference_id ? `/job-cards/${n.reference_id}` : null
+    if (n.case_id) {
+      return `/job-cards/${n.case_id}`
     }
-    // `low_stock` was a legacy parts-inventory notification. The Cases
-    // workflow no longer tracks inventory, so these notifications no
-    // longer deep-link anywhere and simply stay in the bell's list as
-    // informational entries.
     return null
   }
 
@@ -144,7 +141,7 @@ export default function NotificationBell() {
               </div>
             ) : (
               notifications.map((n) => {
-                const typeInfo = typeIcons[n.type] || typeIcons.general
+                const typeInfo = typeIcons[n.type] || typeIcons.other
                 const IconComp = typeInfo.Icon
                 const link = getLink(n)
 
@@ -159,15 +156,18 @@ export default function NotificationBell() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <p className={`text-sm leading-snug ${!n.is_read ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'}`}>
-                          {language === 'ar' ? n.title_ar : n.title_en}
+                          {n.title}
                         </p>
-                        {!n.is_read && <div className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0 mt-1.5" />}
+                        <button
+                          onClick={(e) => handleDelete(e, n.id)}
+                          className="text-gray-300 hover:text-red-500 transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
                       </div>
-                      {(n.body_ar || n.body_en) && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">
-                          {language === 'ar' ? n.body_ar : n.body_en}
-                        </p>
-                      )}
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">
+                        {n.message}
+                      </p>
                       <div className="flex items-center gap-1 mt-1">
                         <Clock className="w-3 h-3 text-gray-300" />
                         <span className="text-[10px] text-gray-400">{timeAgo(n.created_at, language)}</span>
@@ -188,7 +188,7 @@ export default function NotificationBell() {
           {/* Footer */}
           <div className="px-4 py-2 border-t border-gray-100 dark:border-slate-800 text-center">
             <p className="text-[10px] text-gray-400">
-              {language === 'ar' ? 'الإشعارات تُحذف تلقائياً بعد 24 ساعة' : 'Notifications auto-delete after 24 hours'}
+              {language === 'ar' ? 'الإشعارات تُحذف تلقائياً بعد انتهاء صلاحيتها' : 'Notifications auto-delete after expiration'}
             </p>
           </div>
         </div>
