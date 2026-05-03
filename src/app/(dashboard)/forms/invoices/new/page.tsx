@@ -13,7 +13,7 @@
 // =====================================================
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Plus, Trash2, Loader2, Car, ClipboardList, Receipt, StickyNote } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useTranslation } from '@/hooks/useTranslation'
@@ -22,6 +22,7 @@ import { toast } from '@/components/ui/Toast'
 import { generateInvoicePDF } from '@/lib/pdf/invoice'
 import { askPdfLanguage } from '@/lib/pdf/shared'
 import {
+  type Invoice,
   type InvoiceItem,
   type InvoiceItemType,
   type InvoiceStatus,
@@ -44,6 +45,7 @@ interface Vehicle {
   brand: string | null
   manufacturer: string | null
   model: string | null
+  project_code: string | null
 }
 
 function todayStr() {
@@ -58,11 +60,17 @@ function newBlankItem(row: number): InvoiceItem {
 
 export default function CreateInvoicePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { language } = useTranslation()
+
+  // Check if we're in edit mode
+  const editInvoiceId = searchParams.get('edit')
+  const isEditMode = !!editInvoiceId
 
   // ─── DB-backed vehicle list ───
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [loadingVehicles, setLoadingVehicles] = useState(true)
+  const [loadingInvoice, setLoadingInvoice] = useState(false)
 
   // ─── Form state ───
   const [invoiceNumber, setInvoiceNumber] = useState('')
@@ -85,7 +93,13 @@ export default function CreateInvoicePage() {
   const [saving, setSaving] = useState(false)
 
   // ─── Effects ───
-  useEffect(() => { loadVehicles(); reserveNextInvoiceNumber() }, [])
+  useEffect(() => { loadVehicles(); if (!isEditMode) reserveNextInvoiceNumber() }, [isEditMode])
+
+  // Load existing invoice data if in edit mode
+  useEffect(() => {
+    if (!isEditMode || !editInvoiceId) return
+    loadInvoiceData(editInvoiceId)
+  }, [isEditMode, editInvoiceId])
 
   const loadVehicles = async () => {
     setLoadingVehicles(true)
@@ -98,7 +112,7 @@ export default function CreateInvoicePage() {
     for (let p = 0; p < 50; p++) {
       const { data, error } = await supabase
         .from('vehicles')
-        .select('id, plate_number, plate_number_ar, chassis_number, brand, manufacturer, model')
+        .select('id, plate_number, plate_number_ar, chassis_number, brand, manufacturer, model, project_code')
         .order('plate_number')
         .range(from, from + PAGE - 1)
       if (error || !data) break
@@ -108,6 +122,42 @@ export default function CreateInvoicePage() {
     }
     setVehicles(all)
     setLoadingVehicles(false)
+  }
+
+  const loadInvoiceData = async (invoiceId: string) => {
+    setLoadingInvoice(true)
+    try {
+      const supabase = createClient()
+      const [{ data: invoice }, { data: invoiceItems }] = await Promise.all([
+        supabase.from('invoices').select('*').eq('id', invoiceId).single(),
+        supabase.from('invoice_items').select('*').eq('invoice_id', invoiceId).order('row_number'),
+      ])
+
+      if (invoice) {
+        const inv = invoice as Invoice
+        setInvoiceNumber(inv.invoice_number)
+        setInvoiceDate(inv.invoice_date)
+        setStatus(inv.status)
+        setRepairType(inv.repair_type || REPAIR_TYPES[1])
+        setWorkshopName(inv.workshop_name)
+        setMaintenanceManager(inv.maintenance_manager || '')
+        setTechnician(inv.technician || '')
+        setWorkHours(inv.work_hours || 0)
+        setBeneficiaryCompany(inv.beneficiary_company || '')
+        setVehicleId(inv.vehicle_id || '')
+        setProject(inv.project || '')
+        setVatPercentage(inv.vat_percentage)
+        setNotes(inv.notes || '')
+
+        if (invoiceItems && invoiceItems.length > 0) {
+          setItems(invoiceItems as InvoiceItem[])
+        }
+      }
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to load invoice data')
+    } finally {
+      setLoadingInvoice(false)
+    }
   }
 
   /**
@@ -133,6 +183,13 @@ export default function CreateInvoicePage() {
     () => vehicles.find(v => v.id === vehicleId) || null,
     [vehicles, vehicleId]
   )
+
+  // Auto-fill project when vehicle is selected
+  useEffect(() => {
+    if (selectedVehicle && selectedVehicle.project_code && !project) {
+      setProject(selectedVehicle.project_code)
+    }
+  }, [selectedVehicle, project])
 
   const vehicleOptions: SearchableOption<Vehicle>[] = useMemo(
     () => vehicles.map(v => ({
@@ -207,49 +264,71 @@ export default function CreateInvoicePage() {
       vat_amount: totals.vat_amount,
       total: totals.total,
 
-      created_by: user?.id ?? null,
       last_updated_by: user?.id ?? null,
       last_updated_at: nowIso,
     }
 
-    // Retry once on invoice_number uniqueness collision.
-    const tryInsert = async (num: string) => {
+    let invoiceId: string
+
+    if (isEditMode && editInvoiceId) {
+      // Update existing invoice
       const { data, error } = await supabase
         .from('invoices')
-        .insert({ ...payload, invoice_number: num })
+        .update(payload)
+        .eq('id', editInvoiceId)
         .select('*')
         .single()
-      return { data, error }
-    }
 
-    let { data: inserted, error } = await tryInsert(invoiceNumber)
-    if (error && /duplicate key|unique/i.test(error.message)) {
-      const year = new Date().getFullYear()
-      const { data: last } = await supabase
-        .from('invoices')
-        .select('invoice_number')
-        .like('invoice_number', `INV-${year}-%`)
-        .order('invoice_number', { ascending: false })
-        .limit(1)
-      const seq = last?.[0]?.invoice_number
-        ? (parseInt(last[0].invoice_number.split('-').pop() || '0', 10) || 0) + 1
-        : 1
-      const retryNum = formatInvoiceNumber(year, seq)
-      const r = await tryInsert(retryNum)
-      inserted = r.data
-      error = r.error
-      if (!error) setInvoiceNumber(retryNum)
-    }
+      if (error || !data) {
+        setSaving(false)
+        toast.error(error?.message || 'تعذر تحديث الفاتورة')
+        return
+      }
+      invoiceId = data.id
 
-    if (error || !inserted) {
-      setSaving(false)
-      toast.error(error?.message || 'تعذر حفظ الفاتورة')
-      return
+      // Delete existing items and insert new ones
+      await supabase.from('invoice_items').delete().eq('invoice_id', editInvoiceId)
+    } else {
+      // Create new invoice
+      const tryInsert = async (num: string) => {
+        const { data, error } = await supabase
+          .from('invoices')
+          .insert({ ...payload, invoice_number: num, created_by: user?.id ?? null })
+          .select('*')
+          .single()
+        return { data, error }
+      }
+
+      let { data: inserted, error } = await tryInsert(invoiceNumber)
+      if (error && /duplicate key|unique/i.test(error.message)) {
+        const year = new Date().getFullYear()
+        const { data: last } = await supabase
+          .from('invoices')
+          .select('invoice_number')
+          .like('invoice_number', `INV-${year}-%`)
+          .order('invoice_number', { ascending: false })
+          .limit(1)
+        const seq = last?.[0]?.invoice_number
+          ? (parseInt(last[0].invoice_number.split('-').pop() || '0', 10) || 0) + 1
+          : 1
+        const retryNum = formatInvoiceNumber(year, seq)
+        const r = await tryInsert(retryNum)
+        inserted = r.data
+        error = r.error
+        if (!error) setInvoiceNumber(retryNum)
+      }
+
+      if (error || !inserted) {
+        setSaving(false)
+        toast.error(error?.message || 'تعذر حفظ الفاتورة')
+        return
+      }
+      invoiceId = inserted.id
     }
 
     // Insert items
     const rows = items.map((it, i) => ({
-      invoice_id: inserted!.id,
+      invoice_id: invoiceId,
       row_number: i + 1,
       item_type: it.item_type,
       description: it.description,
@@ -265,7 +344,7 @@ export default function CreateInvoicePage() {
       }
     }
     setSaving(false)
-    toast.success(`تم إنشاء الفاتورة ${inserted.invoice_number} ✓`)
+    toast.success(isEditMode ? `تم تحديث الفاتورة ${invoiceNumber} ✓` : `تم إنشاء الفاتورة ${invoiceNumber} ✓`)
 
     if (opts.exportAfter) {
       const lang = await askPdfLanguage(language as 'ar' | 'en')
@@ -276,14 +355,36 @@ export default function CreateInvoicePage() {
           .select('full_name')
           .eq('user_id', user?.id)
           .single()
-        
+
         generateInvoicePDF({
-          ...(inserted as any),
+          id: invoiceId,
+          invoice_number: invoiceNumber,
+          invoice_date: invoiceDate,
+          status,
+          repair_type: repairType,
+          workshop_name: workshopName,
+          maintenance_manager: maintenanceManager || null,
+          technician: technician || null,
+          work_hours: workHours || 0,
+          beneficiary_company: beneficiaryCompany || null,
+          notes: notes || null,
+          vehicle_id: vehicleId || null,
+          vehicle_plate: selectedVehicle?.plate_number || null,
+          vehicle_label: buildVehicleLabel(selectedVehicle) || null,
+          project: project || null,
+          subtotal: totals.subtotal,
+          vat_percentage: vatPercentage,
+          vat_amount: totals.vat_amount,
+          total: totals.total,
+          created_by: user?.id ?? null,
+          created_at: nowIso,
+          last_updated_by: user?.id ?? null,
+          last_updated_at: nowIso,
           items: rows.map(r => ({ ...r, line_total: r.quantity * r.unit_price })),
         } as InvoiceWithItems, lang, prefs?.full_name || undefined)
       }
     }
-    router.push(`/forms/invoices/${inserted.id}`)
+    router.push(`/forms/invoices/${invoiceId}`)
   }
 
   // ─── Render ───
@@ -291,13 +392,21 @@ export default function CreateInvoicePage() {
     'w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-red-500'
   const labelCls = 'block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1'
 
+  if (loadingInvoice) {
+    return (
+      <div className="p-10 text-center text-gray-400">
+        <Loader2 className="w-6 h-6 animate-spin inline-block" />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5" dir="rtl">
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            {language === 'ar' ? 'فاتورة جديدة' : 'New Invoice'}
+            {isEditMode ? (language === 'ar' ? 'تعديل الفاتورة' : 'Edit Invoice') : (language === 'ar' ? 'فاتورة جديدة' : 'New Invoice')}
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             صادرة باسم <span className="font-bold text-red-600">{workshopName}</span>
@@ -576,7 +685,7 @@ export default function CreateInvoicePage() {
           className="flex items-center gap-2 px-5 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
         >
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-          إنشاء الفاتورة
+          {isEditMode ? 'تحديث الفاتورة' : 'إنشاء الفاتورة'}
         </button>
       </div>
     </div>

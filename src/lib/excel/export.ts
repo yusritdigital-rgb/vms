@@ -66,6 +66,44 @@ export function exportToExcel(sheets: ExcelSheet[], filename: string) {
 }
 
 /**
+ * Import data from Excel file
+ */
+export async function importFromExcel(file: File): Promise<{ [sheetName: string]: any[] }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result
+        const workbook = XLSX.read(data, { type: 'binary' })
+        const result: { [sheetName: string]: any[] } = {}
+
+        workbook.SheetNames.forEach(sheetName => {
+          const worksheet = workbook.Sheets[sheetName]
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
+          if (jsonData.length > 0) {
+            const headers = jsonData[0] as string[]
+            const rows = jsonData.slice(1).map((row: any) => {
+              const obj: any = {}
+              headers.forEach((header, index) => {
+                obj[header] = row[index] || ''
+              })
+              return obj
+            })
+            result[sheetName] = rows
+          }
+        })
+
+        resolve(result)
+      } catch (error) {
+        reject(error)
+      }
+    }
+    reader.onerror = reject
+    reader.readAsBinaryString(file)
+  })
+}
+
+/**
  * Invoice-specific Excel export
  */
 export function exportInvoicesToExcel(invoices: any[], items: Record<string, any[]>) {
@@ -75,6 +113,7 @@ export function exportInvoicesToExcel(invoices: any[], items: Record<string, any
     columns: [
       { header: 'رقم الفاتورة', key: 'invoice_number', width: 15 },
       { header: 'التاريخ', key: 'invoice_date', width: 12 },
+      { header: 'المشروع', key: 'project', width: 15 },
       { header: 'اللوحة', key: 'vehicle_plate', width: 12 },
       { header: 'المركبة', key: 'vehicle_label', width: 20 },
       { header: 'الورشة', key: 'workshop_name', width: 20 },
@@ -93,11 +132,13 @@ export function exportInvoicesToExcel(invoices: any[], items: Record<string, any
       allItems.push({
         invoice_number: inv.invoice_number,
         invoice_date: inv.invoice_date,
+        project: inv.project || '',
         vehicle_plate: inv.vehicle_plate,
-        item_name: item.item_name || item.description || '',
+        item_type: item.item_type || '',
+        description: item.description || '',
         quantity: item.quantity || 1,
         unit_price: item.unit_price || 0,
-        total: item.total || 0,
+        line_total: (item.quantity || 1) * (item.unit_price || 0),
       })
     })
   })
@@ -107,11 +148,13 @@ export function exportInvoicesToExcel(invoices: any[], items: Record<string, any
     columns: [
       { header: 'رقم الفاتورة', key: 'invoice_number', width: 15 },
       { header: 'التاريخ', key: 'invoice_date', width: 12 },
+      { header: 'المشروع', key: 'project', width: 15 },
       { header: 'اللوحة', key: 'vehicle_plate', width: 12 },
-      { header: 'البند', key: 'item_name', width: 25 },
+      { header: 'نوع البند', key: 'item_type', width: 12 },
+      { header: 'الوصف', key: 'description', width: 30 },
       { header: 'الكمية', key: 'quantity', width: 10 },
       { header: 'سعر الوحدة', key: 'unit_price', width: 12 },
-      { header: 'الإجمالي', key: 'total', width: 12 },
+      { header: 'الإجمالي', key: 'line_total', width: 12 },
     ],
     data: allItems,
   }

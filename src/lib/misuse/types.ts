@@ -42,6 +42,9 @@ export interface MisuseRegistration {
   vat_amount: number
   total: number
 
+  payment_status: 'pending' | 'paid' | 'rejected' | null
+  payment_notes: string | null
+
   created_by: string | null
   created_at: string
   last_updated_by: string | null

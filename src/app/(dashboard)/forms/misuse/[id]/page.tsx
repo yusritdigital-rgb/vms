@@ -7,10 +7,11 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowRight, FileDown, Loader2, Shield } from 'lucide-react'
+import { ArrowRight, FileDown, Loader2, Shield, Save, CheckCircle, XCircle, Clock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useTranslation } from '@/hooks/useTranslation'
 import { useRole } from '@/hooks/useRole'
+import { usePermissions } from '@/hooks/usePermissions'
 import { toast } from '@/components/ui/Toast'
 import { generateMisusePDF } from '@/lib/pdf/misuse'
 import { askPdfLanguage } from '@/lib/pdf/shared'
@@ -29,12 +30,16 @@ export default function MisuseDetailPage() {
   const isAr = language === 'ar'
   const id = String(params.id)
   const { loading: roleLoading, isCompanyManager } = useRole()
+  const { isAdmin } = usePermissions()
 
   const [mu, setMu]     = useState<MisuseRegistration | null>(null)
   const [labor, setLabor] = useState<MisuseLaborItem[]>([])
   const [parts, setParts] = useState<MisuseSparePartItem[]>([])
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
+  const [savingPayment, setSavingPayment] = useState(false)
+  const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'rejected' | null>(null)
+  const [paymentNotes, setPaymentNotes] = useState('')
 
   // Supervisor-only
   useEffect(() => {
@@ -56,6 +61,10 @@ export default function MisuseDetailPage() {
       setMu((parent as MisuseRegistration) ?? null)
       setLabor((l as any) ?? [])
       setParts((p as any) ?? [])
+      if (parent) {
+        setPaymentStatus((parent as any).payment_status || 'pending')
+        setPaymentNotes((parent as any).payment_notes || '')
+      }
       setLoading(false)
     })()
     return () => { cancelled = true }
@@ -72,6 +81,55 @@ export default function MisuseDetailPage() {
       toast.error(e?.message || 'Export failed')
     } finally {
       setExporting(false)
+    }
+  }
+
+  const handleSavePayment = async () => {
+    if (!mu) return
+    setSavingPayment(true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('misuse_registrations')
+        .update({
+          payment_status: paymentStatus,
+          payment_notes: paymentNotes || null,
+          last_updated_at: new Date().toISOString(),
+        })
+        .eq('id', mu.id)
+      if (error) throw error
+      toast.success(isAr ? 'تم تحديث حالة الدفع' : 'Payment status updated')
+      setMu({ ...mu, payment_status: paymentStatus, payment_notes: paymentNotes || null })
+    } catch (e: any) {
+      toast.error(e?.message || (isAr ? 'فشل التحديث' : 'Update failed'))
+    } finally {
+      setSavingPayment(false)
+    }
+  }
+
+  const getPaymentStatusBadge = (status: string | null) => {
+    switch (status) {
+      case 'paid':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+            <CheckCircle className="w-3.5 h-3.5" />
+            {isAr ? 'مدفوع' : 'Paid'}
+          </span>
+        )
+      case 'rejected':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+            <XCircle className="w-3.5 h-3.5" />
+            {isAr ? 'مرفوض' : 'Rejected'}
+          </span>
+        )
+      default:
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">
+            <Clock className="w-3.5 h-3.5" />
+            {isAr ? 'قيد الانتظار' : 'Pending'}
+          </span>
+        )
     }
   }
 
@@ -114,14 +172,17 @@ export default function MisuseDetailPage() {
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{mu.registration_date}</p>
           </div>
         </div>
-        <button
-          onClick={handleExport}
-          disabled={exporting}
-          className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 inline-flex items-center gap-2 disabled:opacity-60"
-        >
-          {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
-          {isAr ? 'تصدير PDF' : 'Export PDF'}
-        </button>
+        <div className="flex items-center gap-2">
+          {getPaymentStatusBadge(mu.payment_status)}
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 inline-flex items-center gap-2 disabled:opacity-60"
+          >
+            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+            {isAr ? 'تصدير PDF' : 'Export PDF'}
+          </button>
+        </div>
       </div>
 
       {/* Basic info */}
@@ -130,6 +191,46 @@ export default function MisuseDetailPage() {
           <div><div className="text-xs text-gray-500">{isAr ? 'المشروع' : 'Project'}</div><div className="font-semibold">{mu.project_name || '-'}</div></div>
           <div><div className="text-xs text-gray-500">{isAr ? 'نوع السيارة' : 'Vehicle type'}</div><div className="font-semibold">{mu.vehicle_type || '-'}</div></div>
           <div><div className="text-xs text-gray-500">{isAr ? 'اللوحة' : 'Plate'}</div><div className="font-mono font-bold" dir="ltr">{mu.plate_number || '-'}</div></div>
+        </div>
+      </div>
+
+      {/* Payment Status */}
+      <div className={`${cardCls} p-5`}>
+        <div className="flex items-center gap-2 mb-4">
+          <Shield className="w-5 h-5 text-red-600" />
+          <h3 className="text-sm font-bold text-gray-900 dark:text-white">{isAr ? 'حالة الدفع' : 'Payment Status'}</h3>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs text-gray-500 mb-2">{isAr ? 'الحالة' : 'Status'}</label>
+            <select
+              value={paymentStatus || 'pending'}
+              onChange={(e) => setPaymentStatus(e.target.value as any)}
+              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500 focus:border-transparent"
+            >
+              <option value="pending">{isAr ? 'قيد الانتظار' : 'Pending'}</option>
+              <option value="paid">{isAr ? 'مدفوع' : 'Paid'}</option>
+              <option value="rejected">{isAr ? 'مرفوض' : 'Rejected'}</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-2">{isAr ? 'ملاحظات الدفع' : 'Payment Notes'}</label>
+            <textarea
+              value={paymentNotes}
+              onChange={(e) => setPaymentNotes(e.target.value)}
+              rows={3}
+              placeholder={isAr ? 'أضف ملاحظات حول الدفع...' : 'Add payment notes...'}
+              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
+            />
+          </div>
+          <button
+            onClick={handleSavePayment}
+            disabled={savingPayment}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-60 transition-colors"
+          >
+            {savingPayment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {isAr ? 'حفظ حالة الدفع' : 'Save Payment Status'}
+          </button>
         </div>
       </div>
 

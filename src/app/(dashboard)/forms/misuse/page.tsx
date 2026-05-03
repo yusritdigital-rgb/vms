@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, Eye, FileDown, Loader2, FileText, Shield, Trash2, FileSpreadsheet } from 'lucide-react'
+import { Plus, Search, Eye, FileDown, Loader2, FileText, Shield, Trash2, FileSpreadsheet, CheckCircle, XCircle, Clock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useTranslation } from '@/hooks/useTranslation'
 import { useRole } from '@/hooks/useRole'
@@ -110,6 +110,32 @@ export default function MisuseListPage() {
     }
     toast.success(language === 'ar' ? 'تم حذف السجل' : 'Record deleted')
     setRows(prev => prev.filter(r => r.id !== id))
+  }
+
+  const getPaymentStatusBadge = (status: string | null, isAr: boolean) => {
+    switch (status) {
+      case 'paid':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+            <CheckCircle className="w-3 h-3" />
+            {isAr ? 'مدفوع' : 'Paid'}
+          </span>
+        )
+      case 'rejected':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+            <XCircle className="w-3 h-3" />
+            {isAr ? 'مرفوض' : 'Rejected'}
+          </span>
+        )
+      default:
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">
+            <Clock className="w-3 h-3" />
+            {isAr ? 'قيد الانتظار' : 'Pending'}
+          </span>
+        )
+    }
   }
 
   const handleExcelExport = async () => {
@@ -221,19 +247,20 @@ export default function MisuseListPage() {
                 <th className="px-4 py-3 text-start font-semibold">{language === 'ar' ? 'اللوحة' : 'Plate'}</th>
                 <th className="px-4 py-3 text-start font-semibold">{language === 'ar' ? 'نوع السيارة' : 'Vehicle Type'}</th>
                 <th className="px-4 py-3 text-start font-semibold">{language === 'ar' ? 'الإجمالي' : 'Total'}</th>
+                <th className="px-4 py-3 text-start font-semibold">{language === 'ar' ? 'حالة الدفع' : 'Payment'}</th>
                 <th className="px-4 py-3 text-start font-semibold">{language === 'ar' ? 'إجراء' : 'Actions'}</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-gray-400">
+                  <td colSpan={8} className="px-4 py-10 text-center text-gray-400">
                     <Loader2 className="w-5 h-5 animate-spin inline-block" />
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-gray-400">
+                  <td colSpan={8} className="px-4 py-10 text-center text-gray-400">
                     {language === 'ar' ? 'لا توجد سجلات' : 'No records yet'}
                   </td>
                 </tr>
@@ -247,6 +274,9 @@ export default function MisuseListPage() {
                     <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{mu.vehicle_type || '-'}</td>
                     <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white font-mono">
                       {formatCurrency(Number(mu.total))} <span className="text-xs text-gray-400">ر.س</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {getPaymentStatusBadge((mu as any).payment_status, language === 'ar')}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">

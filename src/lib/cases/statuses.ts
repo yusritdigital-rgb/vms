@@ -25,6 +25,10 @@ export const CASE_STATUSES = [
   'بانتظار البيع',
   'تم البيع',
   'تم التسليم للعميل',
+  'انتظار موافقة التامين',
+  'انتظار خطاب التحويل',
+  'محول شؤون قانونية',
+  'السيارة في الوكالة',
 ] as const
 
 export type CaseStatus = typeof CASE_STATUSES[number]
@@ -61,4 +65,8 @@ export const STATUS_COLOR: Record<CaseStatus, string> = {
   'بانتظار البيع':                        'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
   'تم البيع':                             'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
   'تم التسليم للعميل':                    'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+  'انتظار موافقة التامين':                'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
+  'انتظار خطاب التحويل':                  'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
+  'محول شؤون قانونية':                    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+  'السيارة في الوكالة':                  'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
 }

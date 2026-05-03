@@ -8,12 +8,13 @@
 //   رقم الفاتورة | المركبة | الورشة | النوع | التاريخ | الإجمالي | الحالة | إجراء
 // =====================================================
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, Eye, Edit3, FileDown, Loader2, FileText, Trash2, FileSpreadsheet } from 'lucide-react'
+import { Plus, Search, Eye, Edit3, FileDown, Loader2, Trash2, FileSpreadsheet, Upload } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useTranslation } from '@/hooks/useTranslation'
+import { useRole } from '@/hooks/useRole'
 import { usePermissions } from '@/hooks/usePermissions'
 import {
   type Invoice,
@@ -24,17 +25,21 @@ import {
 } from '@/lib/invoices/types'
 import { generateInvoicePDF } from '@/lib/pdf/invoice'
 import { askPdfLanguage } from '@/lib/pdf/shared'
-import { exportInvoicesToExcel } from '@/lib/excel/export'
+import { importFromExcel } from '@/lib/excel/export'
+import { exportSingleSheet } from '@/lib/utils/excelExport'
 import { toast } from '@/components/ui/Toast'
 
 export default function InvoicesListPage() {
   const router = useRouter()
   const { language } = useTranslation()
   const { isAdmin } = usePermissions()
+  const { isCompanyManager } = useRole()
   const [rows, setRows] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
   const [exportingId, setExportingId] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -128,10 +133,83 @@ export default function InvoicesListPage() {
         itemsByInvoice[item.invoice_id].push(item)
       })
 
-      exportInvoicesToExcel(rows, itemsByInvoice)
+      // Create export data with items flattened
+      const exportData = rows.map(inv => {
+        const invItems = itemsByInvoice[inv.id] || []
+        const laborItems = invItems.filter((i: any) => i.item_type === 'labor')
+        const sparePartItems = invItems.filter((i: any) => i.item_type === 'spare_part')
+        
+        return {
+          invoice_number: inv.invoice_number,
+          invoice_date: inv.invoice_date,
+          project: inv.project || '',
+          vehicle_plate: inv.vehicle_plate || '',
+          vehicle_label: inv.vehicle_label || '',
+          workshop_name: inv.workshop_name || '',
+          repair_type: inv.repair_type || '',
+          status: STATUS_LABEL_AR[inv.status],
+          subtotal: inv.subtotal,
+          vat_percentage: inv.vat_percentage,
+          vat_amount: inv.vat_amount,
+          total: inv.total,
+          labor_count: laborItems.length,
+          labor_items: laborItems.map((i: any) => `${i.description} (${i.quantity} × ${i.unit_price})`).join(' | '),
+          parts_count: sparePartItems.length,
+          parts_items: sparePartItems.map((i: any) => `${i.description} (${i.quantity} × ${i.unit_price})`).join(' | '),
+        }
+      })
+
+      await exportSingleSheet(
+        'الفواتير',
+        [
+          { header: 'رقم الفاتورة', key: 'invoice_number', width: 18 },
+          { header: 'التاريخ', key: 'invoice_date', width: 14 },
+          { header: 'المشروع', key: 'project', width: 15 },
+          { header: 'رقم اللوحة', key: 'vehicle_plate', width: 14 },
+          { header: 'المركبة', key: 'vehicle_label', width: 22 },
+          { header: 'الورشة', key: 'workshop_name', width: 20 },
+          { header: 'نوع الإصلاح', key: 'repair_type', width: 15 },
+          { header: 'الحالة', key: 'status', width: 14 },
+          { header: 'المجموع الفرعي', key: 'subtotal', width: 14 },
+          { header: 'ضريبة %', key: 'vat_percentage', width: 10 },
+          { header: 'قيمة الضريبة', key: 'vat_amount', width: 14 },
+          { header: 'الإجمالي', key: 'total', width: 14 },
+          { header: 'عدد الأعمال', key: 'labor_count', width: 12 },
+          { header: 'الأعمال', key: 'labor_items', width: 40 },
+          { header: 'عدد القطع', key: 'parts_count', width: 12 },
+          { header: 'قطع الغيار', key: 'parts_items', width: 40 },
+        ],
+        exportData,
+        'invoices',
+        { noSummary: true },
+      )
       toast.success(language === 'ar' ? 'تم تصدير ملف Excel' : 'Excel exported successfully')
     } catch (e: any) {
       toast.error(e?.message || (language === 'ar' ? 'تعذر تصدير ملف Excel' : 'Excel export failed'))
+    }
+  }
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setImporting(true)
+    try {
+      const data = await importFromExcel(file)
+      console.log('Imported data:', data)
+      toast.success(language === 'ar' ? 'تم استيراد الملف بنجاح' : 'File imported successfully')
+      // TODO: Process the imported data and create invoices
+    } catch (e: any) {
+      toast.error(e?.message || (language === 'ar' ? 'تعذر استيراد الملف' : 'Import failed'))
+    } finally {
+      setImporting(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
     }
   }
 
@@ -149,19 +227,27 @@ export default function InvoicesListPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
+            onClick={handleImportClick}
+            disabled={importing}
+            className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center gap-2 disabled:opacity-50"
+          >
+            {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            {language === 'ar' ? 'استيراد Excel' : 'Import Excel'}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+          <button
             onClick={handleExcelExport}
             className="px-3 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors inline-flex items-center gap-2"
           >
             <FileSpreadsheet className="w-4 h-4" />
             {language === 'ar' ? 'تصدير Excel' : 'Export Excel'}
           </button>
-          <Link
-            href="/forms"
-            className="px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors inline-flex items-center gap-2"
-          >
-            <FileText className="w-4 h-4" />
-            {language === 'ar' ? 'نماذج Excel' : 'Excel Forms'}
-          </Link>
           <Link
             href="/forms/invoices/new"
             className="px-4 py-2 text-sm bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors inline-flex items-center gap-2"
@@ -242,13 +328,15 @@ export default function InvoicesListPage() {
                         >
                           <Eye className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => router.push(`/forms/invoices/${inv.id}?edit=1`)}
-                          title={language === 'ar' ? 'تعديل' : 'Edit'}
-                          className="p-1.5 rounded-md text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
+                        {(isCompanyManager || isAdmin) && inv.status === 'draft' && (
+                          <button
+                            onClick={() => router.push(`/forms/invoices/${inv.id}?edit=1`)}
+                            title={language === 'ar' ? 'تعديل' : 'Edit'}
+                            className="p-1.5 rounded-md text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleExport(inv)}
                           disabled={exportingId === inv.id}

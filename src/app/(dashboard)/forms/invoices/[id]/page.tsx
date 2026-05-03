@@ -9,10 +9,12 @@
 // =====================================================
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
-import { Loader2, FileDown, ArrowRight, Pencil } from 'lucide-react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { Loader2, FileDown, ArrowRight, Pencil, Edit3 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useTranslation } from '@/hooks/useTranslation'
+import { useRole } from '@/hooks/useRole'
+import { usePermissions } from '@/hooks/usePermissions'
 import {
   type Invoice,
   type InvoiceItem,
@@ -29,12 +31,18 @@ import { toast } from '@/components/ui/Toast'
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { language } = useTranslation()
+  const { isCompanyManager } = useRole()
+  const { isAdmin } = usePermissions()
 
   const [inv, setInv] = useState<Invoice | null>(null)
   const [items, setItems] = useState<InvoiceItem[]>([])
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
+
+  // Check if edit mode is requested
+  const editMode = searchParams.get('edit') === '1'
 
   useEffect(() => {
     let cancelled = false
@@ -51,6 +59,16 @@ export default function InvoiceDetailPage() {
     })()
     return () => { cancelled = true }
   }, [id])
+
+  // Redirect to edit page if edit mode is requested and user has permission
+  useEffect(() => {
+    if (editMode && inv && (isCompanyManager || isAdmin) && inv.status === 'draft') {
+      // Redirect to new page with invoice data pre-filled
+      // For now, we'll just redirect to the new page
+      // In a full implementation, we'd pass the invoice data via state or URL params
+      router.push(`/forms/invoices/new?edit=${inv.id}`)
+    }
+  }, [editMode, inv, isCompanyManager, isAdmin, router])
 
   const handleExport = async () => {
     if (!inv) return

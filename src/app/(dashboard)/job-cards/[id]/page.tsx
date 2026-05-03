@@ -14,10 +14,11 @@ import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import {
   ArrowLeft, Car, Loader2, Wrench, Briefcase, StickyNote, ClipboardList, Gauge, Calendar, CheckCircle,
-  UserCircle, Clock, Printer,
+  UserCircle, Clock, Printer, Trash2,
 } from 'lucide-react'
 
 import { useTranslation } from '@/hooks/useTranslation'
+import { usePermissions } from '@/hooks/usePermissions'
 import { createClient } from '@/lib/supabase/client'
 import { getCase, updateExpectedCompletionDate } from '@/lib/cases/queries'
 import type { CaseRow } from '@/lib/cases/types'
@@ -51,6 +52,7 @@ export default function CaseDetailPage() {
   const router = useRouter()
   const { language } = useTranslation()
   const isAr = language === 'ar'
+  const { isAdmin } = usePermissions()
 
   const [c, setC] = useState<CaseRow | null>(null)
   const [alt, setAlt] = useState<ReplacementVehicle | null>(null)
@@ -199,6 +201,18 @@ export default function CaseDetailPage() {
     || 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
   const closed = isClosedStatus(c.status)
 
+  const handleDelete = async () => {
+    if (!confirm(isAr ? 'هل أنت متأكد من حذف هذه الحالة؟ هذا الإجراء لا يمكن التراجع عنه.' : 'Are you sure you want to delete this case? This action cannot be undone.')) return
+    const supabase = createClient()
+    const { error } = await supabase.from('job_cards').delete().eq('id', c.id)
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+    toast.success(isAr ? 'تم حذف الحالة' : 'Case deleted')
+    router.push('/job-cards')
+  }
+
   return (
     <div className="max-w-5xl mx-auto space-y-5" dir={isAr ? 'rtl' : 'ltr'}>
       {/* Header */}
@@ -227,13 +241,24 @@ export default function CaseDetailPage() {
             </div>
           </div>
         </div>
-        <Link
-          href="/job-cards"
-          className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          {isAr ? 'كل الحالات' : 'All cases'}
-        </Link>
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <button
+              onClick={handleDelete}
+              className="inline-flex items-center gap-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 px-3 py-2 rounded-lg transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              {isAr ? 'حذف' : 'Delete'}
+            </button>
+          )}
+          <Link
+            href="/job-cards"
+            className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            {isAr ? 'كل الحالات' : 'All cases'}
+          </Link>
+        </div>
       </div>
 
       {/* Last-updated-by banner — shown prominently under the header so
