@@ -8,10 +8,10 @@
 //   رقم الفاتورة | المركبة | الورشة | النوع | التاريخ | الإجمالي | الحالة | إجراء
 // =====================================================
 
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, Eye, Edit3, FileDown, Loader2, Trash2, FileSpreadsheet, Upload } from 'lucide-react'
+import { Plus, Search, Eye, Edit3, FileDown, Loader2, Trash2, FileSpreadsheet } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useTranslation } from '@/hooks/useTranslation'
 import { useRole } from '@/hooks/useRole'
@@ -25,7 +25,6 @@ import {
 } from '@/lib/invoices/types'
 import { generateInvoicePDF } from '@/lib/pdf/invoice'
 import { askPdfLanguage } from '@/lib/pdf/shared'
-import { importFromExcel } from '@/lib/excel/export'
 import { exportSingleSheet } from '@/lib/utils/excelExport'
 import { toast } from '@/components/ui/Toast'
 
@@ -38,8 +37,6 @@ export default function InvoicesListPage() {
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
   const [exportingId, setExportingId] = useState<string | null>(null)
-  const [importing, setImporting] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -189,30 +186,6 @@ export default function InvoicesListPage() {
     }
   }
 
-  const handleImportClick = () => {
-    fileInputRef.current?.click()
-  }
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    setImporting(true)
-    try {
-      const data = await importFromExcel(file)
-      console.log('Imported data:', data)
-      toast.success(language === 'ar' ? 'تم استيراد الملف بنجاح' : 'File imported successfully')
-      // TODO: Process the imported data and create invoices
-    } catch (e: any) {
-      toast.error(e?.message || (language === 'ar' ? 'تعذر استيراد الملف' : 'Import failed'))
-    } finally {
-      setImporting(false)
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
-      }
-    }
-  }
-
   return (
     <div className="space-y-5" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       {/* Header */}
@@ -226,21 +199,6 @@ export default function InvoicesListPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleImportClick}
-            disabled={importing}
-            className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center gap-2 disabled:opacity-50"
-          >
-            {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-            {language === 'ar' ? 'استيراد Excel' : 'Import Excel'}
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={handleFileChange}
-            className="hidden"
-          />
           <button
             onClick={handleExcelExport}
             className="px-3 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors inline-flex items-center gap-2"

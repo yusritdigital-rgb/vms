@@ -164,6 +164,7 @@ export function exportInvoicesToExcel(invoices: any[], items: Record<string, any
 
 /**
  * Misuse report-specific Excel export
+ * Format matches invoices export with combined items sheet
  */
 export function exportMisuseToExcel(registrations: any[], laborItems: Record<string, any[]>, sparePartItems: Record<string, any[]>) {
   // Main sheet: Registration summary
@@ -182,67 +183,58 @@ export function exportMisuseToExcel(registrations: any[], laborItems: Record<str
     data: registrations,
   }
 
-  // Labor items sheet
-  const allLabor: any[] = []
+  // Combined items sheet (labor + parts) - same format as invoices
+  const allItems: any[] = []
   registrations.forEach(reg => {
-    const items = laborItems[reg.id] || []
-    items.forEach((item: any) => {
-      allLabor.push({
+    const labor = laborItems[reg.id] || []
+    const parts = sparePartItems[reg.id] || []
+    
+    // Add labor items
+    labor.forEach((item: any) => {
+      allItems.push({
         registration_number: reg.registration_number,
         registration_date: reg.registration_date,
+        project: reg.project_name || '',
         plate_number: reg.plate_number,
-        item_name: item.item_name || item.description || '',
+        item_type: 'أعمال الصيانة',
+        description: item.item_name || item.description || '',
         quantity: item.quantity || 1,
         unit_price: item.unit_price || 0,
-        total: item.total || 0,
+        line_total: (item.quantity || 1) * (item.unit_price || 0),
+      })
+    })
+    
+    // Add spare part items
+    parts.forEach((item: any) => {
+      allItems.push({
+        registration_number: reg.registration_number,
+        registration_date: reg.registration_date,
+        project: reg.project_name || '',
+        plate_number: reg.plate_number,
+        item_type: 'قطع الغيار',
+        description: item.item_name || item.description || '',
+        quantity: item.quantity || 1,
+        unit_price: item.unit_price || 0,
+        line_total: (item.quantity || 1) * (item.unit_price || 0),
       })
     })
   })
 
-  const laborSheet: ExcelSheet = {
-    name: 'أعمال الصيانة',
+  const detailsSheet: ExcelSheet = {
+    name: 'تفاصيل البنود',
     columns: [
       { header: 'رقم السجل', key: 'registration_number', width: 15 },
       { header: 'التاريخ', key: 'registration_date', width: 12 },
+      { header: 'المشروع', key: 'project', width: 15 },
       { header: 'اللوحة', key: 'plate_number', width: 12 },
-      { header: 'البند', key: 'item_name', width: 25 },
+      { header: 'نوع البند', key: 'item_type', width: 12 },
+      { header: 'الوصف', key: 'description', width: 30 },
       { header: 'الكمية', key: 'quantity', width: 10 },
       { header: 'سعر الوحدة', key: 'unit_price', width: 12 },
-      { header: 'الإجمالي', key: 'total', width: 12 },
+      { header: 'الإجمالي', key: 'line_total', width: 12 },
     ],
-    data: allLabor,
+    data: allItems,
   }
 
-  // Spare parts sheet
-  const allParts: any[] = []
-  registrations.forEach(reg => {
-    const items = sparePartItems[reg.id] || []
-    items.forEach((item: any) => {
-      allParts.push({
-        registration_number: reg.registration_number,
-        registration_date: reg.registration_date,
-        plate_number: reg.plate_number,
-        item_name: item.item_name || item.description || '',
-        quantity: item.quantity || 1,
-        unit_price: item.unit_price || 0,
-        total: item.total || 0,
-      })
-    })
-  })
-
-  const partsSheet: ExcelSheet = {
-    name: 'قطع الغيار',
-    columns: [
-      { header: 'رقم السجل', key: 'registration_number', width: 15 },
-      { header: 'التاريخ', key: 'registration_date', width: 12 },
-      { header: 'اللوحة', key: 'plate_number', width: 12 },
-      { header: 'القطعة', key: 'item_name', width: 25 },
-      { header: 'الكمية', key: 'quantity', width: 10 },
-      { header: 'سعر الوحدة', key: 'unit_price', width: 12 },
-      { header: 'الإجمالي', key: 'total', width: 12 },
-    ],
-    data: allParts,
-  }
-
-  exportToExcel([summarySheet, laborSheet, partsSheet], 'سجلات_سوء_الاستخدام')
+  exportToExcel([summarySheet, detailsSheet], 'سجلات_سوء_الاستخدام')
 }

@@ -96,8 +96,22 @@ export default function AppointmentsListPage() {
    * `checked_in` / `no_show` also stamp `attendance_marked_at` so we
    * can later tell when attendance was recorded vs when the appointment
    * was originally created.
+   *
+   * After confirmation, only system_admin can change the status.
    */
   const updateStatus = async (a: Appointment, status: AppointmentStatus) => {
+    // If status is already confirmed (checked_in or no_show), only system_admin can change it
+    if ((a.status === 'checked_in' || a.status === 'no_show') && !isAdmin) {
+      toast.error('لا يمكن تعديل الحالة بعد التأكيد. يرجى التواصل مع مدير النظام.')
+      return
+    }
+
+    // Show confirmation dialog
+    const statusLabel = STATUS_LABEL_AR[status]
+    if (!confirm(`هل أنت متأكد من تغيير الحالة إلى "${statusLabel}"؟ هذا الإجراء نهائي ولا يمكن التراجع عنه إلا من قبل مدير النظام.`)) {
+      return
+    }
+
     const supabase = createClient()
     const patch: Record<string, any> = { status }
     if (status === 'checked_in' || status === 'no_show') {
