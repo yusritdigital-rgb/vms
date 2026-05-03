@@ -163,7 +163,7 @@ export default function MisuseListPage() {
         partsByMisuse[item.misuse_id].push(item)
       })
 
-      exportMisuseToExcel(rows, laborByMisuse, partsByMisuse)
+      await exportMisuseToExcel(rows, laborByMisuse, partsByMisuse)
       toast.success(language === 'ar' ? 'تم تصدير ملف Excel' : 'Excel exported successfully')
     } catch (e: any) {
       toast.error(e?.message || (language === 'ar' ? 'تعذر تصدير ملف Excel' : 'Excel export failed'))

@@ -275,9 +275,9 @@ export const PDF_STYLES = `
   table.items thead th.num { text-align: center; width: 30px; }
   table.items thead th.right { text-align: end; }
   table.items tbody td {
-    padding: 7px 10px;
+    padding: 5px 10px;
     border-bottom: 1px solid var(--line);
-    font-size: 11px;
+    font-size: 10px;
   }
   table.items tbody tr:nth-child(even) td { background: var(--panel); }
   table.items tbody td.num   { text-align: center; color: var(--muted); }

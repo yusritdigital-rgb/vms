@@ -164,23 +164,26 @@ export function exportInvoicesToExcel(invoices: any[], items: Record<string, any
 
 /**
  * Misuse report-specific Excel export
- * Format matches invoices export with combined items sheet
+ * Format matches invoices export with combined items sheet and full styling
  */
-export function exportMisuseToExcel(registrations: any[], laborItems: Record<string, any[]>, sparePartItems: Record<string, any[]>) {
+export async function exportMisuseToExcel(registrations: any[], laborItems: Record<string, any[]>, sparePartItems: Record<string, any[]>) {
+  const { exportDashboardExcel } = await import('@/lib/utils/excelExport')
+  
   // Main sheet: Registration summary
-  const summarySheet: ExcelSheet = {
-    name: 'سجلات سوء الاستخدام',
+  const summarySheet = {
+    sheetName: 'سجلات سوء الاستخدام',
+    title: 'سجلات سوء الاستخدام',
+    subtitle: 'نموذج سوء الاستخدام / تحميل تكلفة الإصلاح',
     columns: [
       { header: 'رقم السجل', key: 'registration_number', width: 15 },
       { header: 'التاريخ', key: 'registration_date', width: 12 },
       { header: 'المشروع', key: 'project_name', width: 20 },
       { header: 'اللوحة', key: 'plate_number', width: 12 },
       { header: 'نوع المركبة', key: 'vehicle_type', width: 15 },
-      { header: 'السائق', key: 'driver_name', width: 20 },
       { header: 'الوصف', key: 'description', width: 30 },
       { header: 'الإجمالي', key: 'total', width: 12 },
     ],
-    data: registrations,
+    rows: registrations,
   }
 
   // Combined items sheet (labor + parts) - same format as invoices
@@ -220,8 +223,10 @@ export function exportMisuseToExcel(registrations: any[], laborItems: Record<str
     })
   })
 
-  const detailsSheet: ExcelSheet = {
-    name: 'تفاصيل البنود',
+  const detailsSheet = {
+    sheetName: 'تفاصيل البنود',
+    title: 'تفاصيل البنود',
+    subtitle: 'أعمال الصيانة وقطع الغيار',
     columns: [
       { header: 'رقم السجل', key: 'registration_number', width: 15 },
       { header: 'التاريخ', key: 'registration_date', width: 12 },
@@ -233,8 +238,8 @@ export function exportMisuseToExcel(registrations: any[], laborItems: Record<str
       { header: 'سعر الوحدة', key: 'unit_price', width: 12 },
       { header: 'الإجمالي', key: 'line_total', width: 12 },
     ],
-    data: allItems,
+    rows: allItems,
   }
 
-  exportToExcel([summarySheet, detailsSheet], 'سجلات_سوء_الاستخدام')
+  await exportDashboardExcel([summarySheet, detailsSheet], 'سجلات_سوء_الاستخدام', 'شركة الأوائل')
 }
