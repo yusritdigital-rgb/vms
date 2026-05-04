@@ -14,6 +14,7 @@ export type DateRangeKey = 'all' | 'today' | '7d' | '30d'
 
 export interface CaseFiltersValue {
   project: 'all' | string
+  workshop: 'all' | string
   date:    DateRangeKey
   status:  'all' | string
   search:  string
@@ -21,6 +22,7 @@ export interface CaseFiltersValue {
 
 export const EMPTY_FILTERS: CaseFiltersValue = {
   project: 'all',
+  workshop: 'all',
   date:    'all',
   status:  'all',
   search:  '',
@@ -30,12 +32,13 @@ interface Props {
   value: CaseFiltersValue
   onChange: (next: CaseFiltersValue) => void
   projectOptions: string[]
+  workshopOptions: string[]
   isAr: boolean
   /** When true, the status dropdown only lists open statuses. */
   openOnly?: boolean
 }
 
-export default function CaseFilters({ value, onChange, projectOptions, isAr, openOnly = true }: Props) {
+export default function CaseFilters({ value, onChange, projectOptions, workshopOptions, isAr, openOnly = true }: Props) {
   const set = <K extends keyof CaseFiltersValue>(k: K, v: CaseFiltersValue[K]) =>
     onChange({ ...value, [k]: v })
 
@@ -45,6 +48,7 @@ export default function CaseFilters({ value, onChange, projectOptions, isAr, ope
 
   const active =
     value.project !== 'all' ||
+    value.workshop !== 'all' ||
     value.date    !== 'all' ||
     value.status  !== 'all' ||
     value.search.trim() !== ''
@@ -64,6 +68,22 @@ export default function CaseFilters({ value, onChange, projectOptions, isAr, ope
         >
           <option value="all">{isAr ? 'كل المشاريع' : 'All projects'}</option>
           {projectOptions.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+      </div>
+
+      {/* Workshop */}
+      <div className="flex flex-col">
+        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1">
+          <Briefcase className="w-3 h-3" />
+          {isAr ? 'الورشة' : 'Workshop'}
+        </span>
+        <select
+          value={value.workshop}
+          onChange={(e) => set('workshop', e.target.value)}
+          className="text-sm px-2.5 py-1.5 border border-gray-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white min-w-[160px]"
+        >
+          <option value="all">{isAr ? 'كل الورش' : 'All workshops'}</option>
+          {workshopOptions.map(w => <option key={w} value={w}>{w}</option>)}
         </select>
       </div>
 
@@ -144,10 +164,12 @@ export function applyCaseFilters<T extends {
   status: string
   received_at: string
   job_card_number: string
+  workshop_name: string | null
   vehicle: { plate_number: string | null; project_code: string | null } | null
 }>(list: T[], f: CaseFiltersValue): T[] {
   if (
     f.project === 'all' &&
+    f.workshop === 'all' &&
     f.date    === 'all' &&
     f.status  === 'all' &&
     f.search.trim() === ''
@@ -159,6 +181,7 @@ export function applyCaseFilters<T extends {
 
   return list.filter(c => {
     if (f.project !== 'all' && (c.vehicle?.project_code || '') !== f.project) return false
+    if (f.workshop !== 'all' && (c.workshop_name || '') !== f.workshop) return false
     if (f.status  !== 'all' && c.status !== f.status)                           return false
     if (f.date !== 'all') {
       const t = new Date(c.received_at).getTime()

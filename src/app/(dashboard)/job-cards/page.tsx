@@ -72,6 +72,16 @@ export default function CasesPage() {
     return Array.from(set).sort()
   }, [openCases])
 
+  // Workshop options derived from the actual open cases in play.
+  const workshopOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const c of openCases) {
+      const w = (c.workshop_name || '').trim()
+      if (w) set.add(w)
+    }
+    return Array.from(set).sort()
+  }, [openCases])
+
   const filteredOpen    = useMemo(() => applyCaseFilters(openCases, filters), [openCases, filters])
   // "سجل الحالات المفتوحة" must contain ONLY open cases. Closed
   // cases live in /history (سجل الحالات). The two sections on this
@@ -141,6 +151,7 @@ export default function CasesPage() {
           value={filters}
           onChange={setFilters}
           projectOptions={projectOptions}
+          workshopOptions={workshopOptions}
           isAr={isAr}
           openOnly
         />

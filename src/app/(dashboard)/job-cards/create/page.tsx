@@ -32,11 +32,11 @@ import {
 
 import { useTranslation } from '@/hooks/useTranslation'
 import { useAllVehicles, buildVehicleSearchText, formatVehicleLabel, formatVehicleSublabel, type VehicleLite } from '@/hooks/useAllVehicles'
+import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/components/ui/Toast'
 import SearchableSelect, { type SearchableOption } from '@/components/ui/SearchableSelect'
 import { createCase, listAvailableRvVehicles, getLatestReplacementReturnOdometer } from '@/lib/cases/queries'
 import { generateReceivingHandoverPDF } from '@/lib/pdf/receivingHandover'
-import { WORKSHOPS } from '@/lib/workshops/workshops'
 import { CASE_STATUSES } from '@/lib/cases/statuses'
 import { isRvProjectCode } from '@/lib/alternatives/rules'
 
@@ -73,6 +73,14 @@ export default function CreateCasePage() {
   }>>([])
   const [loadingRvVehicles, setLoadingRvVehicles] = useState(true)
 
+  // ─── Load workshops from database ───
+  const [workshops, setWorkshops] = useState<Array<{
+    id: string
+    workshop_name_ar: string
+    city_ar: string | null
+  }>>([])
+  const [loadingWorkshops, setLoadingWorkshops] = useState(true)
+
   useEffect(() => {
     const loadRvVehicles = async () => {
       setLoadingRvVehicles(true)
@@ -88,11 +96,33 @@ export default function CreateCasePage() {
     loadRvVehicles()
   }, [])
 
+  useEffect(() => {
+    const loadWorkshops = async () => {
+      setLoadingWorkshops(true)
+      try {
+        const supabase = createClient()
+        const { data, error } = await supabase
+          .from('workshops')
+          .select('id, workshop_name_ar, city_ar')
+          .eq('active_status', true)
+          .order('workshop_name_ar')
+        if (error) throw error
+        setWorkshops((data as any[]) ?? [])
+      } catch (e) {
+        console.error('[create-case] failed to load workshops', e)
+      } finally {
+        setLoadingWorkshops(false)
+      }
+    }
+    loadWorkshops()
+  }, [])
+
   // ─── Form state ───
   const [vehicleId, setVehicleId]   = useState('')
   const [type, setType]             = useState<'accident' | 'mechanical'>('mechanical')
   const [workshopId, setWorkshopId] = useState('')
   const [entryOdo, setEntryOdo]     = useState<string>('')
+  const [customerPhone, setCustomerPhone] = useState<string>('')
   // Odometer of the replacement vehicle at handover. Required when a
   // replacement is assigned; persisted as a `vehicle_odometer_readings`
   // row alongside the main vehicle's reading.
@@ -193,8 +223,12 @@ export default function CreateCasePage() {
   }, [availableRvVehicles, vehicleId])
 
   const workshopOptions: SearchableOption[] = useMemo(
-    () => WORKSHOPS.map(w => ({ value: w.id, label: w.display_label, sublabel: w.city_ar })),
-    []
+    () => workshops.map(w => ({
+      value: w.id,
+      label: w.workshop_name_ar,
+      sublabel: w.city_ar || ''
+    })),
+    [workshops]
   )
 
   // ─── Validation ───
@@ -250,14 +284,14 @@ export default function CreateCasePage() {
     }
     setSaving(true)
     try {
-      const ws = WORKSHOPS.find(w => w.id === workshopId) ?? null
+      const ws = workshops.find(w => w.id === workshopId) ?? null
 
       const row = await createCase({
         vehicle_id:              vehicleId,
         type,
         status,
         workshop_id:             ws?.id ?? null,
-        workshop_name:           ws?.name_ar ?? null,
+        workshop_name:           ws?.workshop_name_ar ?? null,
         workshop_city:           ws?.city_ar ?? null,
         entry_odometer:          Number(entryOdo) || 0,
         received_at:             new Date(receivedAt).toISOString(),
@@ -266,6 +300,7 @@ export default function CreateCasePage() {
         expected_completion_date: null,
         complaint_description:   complaint.trim() || null,
         internal_notes:          notes.trim() || null,
+        customer_phone:          customerPhone.trim() || null,
         has_replacement_vehicle: hasAlt,
         replacement_vehicle_id:  hasAlt ? (altVehicleId || null) : null,
         replacement_entry_odometer:
@@ -276,9 +311,9 @@ export default function CreateCasePage() {
       })
 
       toast.success(isAr ? `تم إنشاء الحالة ${row.job_card_number}` : `Case ${row.job_card_number} created`)
-      
+
       // Generate receiving handover form
-      const workshop = WORKSHOPS.find(w => w.id === workshopId)
+      const workshop = workshops.find(w => w.id === workshopId)
       const mainVehicle = vehicles.find(v => v.id === vehicleId)
       const altVehicle = hasAlt ? vehicles.find(v => v.id === altVehicleId) : null
       
@@ -289,6 +324,7 @@ export default function CreateCasePage() {
           movementType: 'دخول' as const,
           odometer: Number(entryOdo) || null,
           vehicleMakeModel: [mainVehicle?.brand || mainVehicle?.manufacturer, mainVehicle?.model].filter(Boolean).join(' ') || null,
+          projectCode: mainVehicle?.project_code || null,
         },
         ...(altVehicle ? [{
           plateNumber: altVehicle.plate_number || altVehicle.plate_number_ar || null,
@@ -296,13 +332,14 @@ export default function CreateCasePage() {
           movementType: 'خروج' as const,
           odometer: Number(altEntryOdo) || null,
           vehicleMakeModel: [altVehicle.brand || altVehicle.manufacturer, altVehicle.model].filter(Boolean).join(' ') || null,
+          projectCode: altVehicle.project_code || null,
         }] : []),
       ]
 
       generateReceivingHandoverPDF({
         caseNumber: row.job_card_number,
         caseDate: row.received_at,
-        workshop: workshop?.name_ar || null,
+        workshop: workshop?.workshop_name_ar || null,
         vehicles: handoverVehicles,
       })
 
@@ -462,7 +499,7 @@ export default function CreateCasePage() {
           </div>
         </section>
 
-        {/* ═══ Row 3: Description + Internal notes  (2-col) ═══ */}
+        {/* ═══ Row 3: Description + Internal notes + Customer phone  (3-col) ═══ */}
         <section className={sectionCls}>
           <div className={sectionHeaderCls}>
             <ClipboardList className="w-4 h-4 text-red-600" />
@@ -470,7 +507,7 @@ export default function CreateCasePage() {
               {isAr ? 'الوصف والملاحظات' : 'Description & Notes'}
             </h2>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div>
               <label className={labelCls}>{isAr ? 'الشكوى / الوصف' : 'Complaint / description'}</label>
               <textarea
@@ -490,6 +527,16 @@ export default function CreateCasePage() {
                 rows={4}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className={labelCls}>{isAr ? 'رقم جوال العميل' : 'Customer phone'}</label>
+              <input
+                type="tel"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                placeholder={isAr ? '05xxxxxxxx' : '05xxxxxxxx'}
                 className={inputCls}
               />
             </div>

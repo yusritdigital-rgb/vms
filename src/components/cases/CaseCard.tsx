@@ -64,12 +64,18 @@ export default function CaseCard({ c, isAr, highlight, onSaved }: Props) {
             </span>
           </p>
 
-          {/* Meta chips: project · expected · days · last update */}
+          {/* Meta chips: project · workshop · expected · days · last update */}
           <div className="flex flex-wrap items-center gap-1.5 mt-2">
             {c.vehicle?.project_code && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px]">
                 <Briefcase className="w-3 h-3" />
                 {c.vehicle.project_code}
+              </span>
+            )}
+            {c.workshop_name && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-[11px]">
+                <Briefcase className="w-3 h-3" />
+                {c.workshop_name}
               </span>
             )}
             {due && (

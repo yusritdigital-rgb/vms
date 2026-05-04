@@ -43,7 +43,7 @@ const CASE_SELECT = `
   workshop_id, workshop_name, workshop_city,
   vehicle_id, replacement_vehicle_id,
   replacement_return_odometer, replacement_return_date, replacement_return_notes,
-  complaint_description, internal_notes,
+  complaint_description, internal_notes, customer_phone,
   entry_odometer, exit_odometer,
   created_at, last_updated_at, last_updated_by,
   vehicle:vehicles!job_cards_vehicle_id_fkey(plate_number, project_code, brand, model, chassis_number),
@@ -59,7 +59,7 @@ const CASE_SELECT_BARE = `
   workshop_id, workshop_name, workshop_city,
   vehicle_id, replacement_vehicle_id,
   replacement_return_odometer, replacement_return_date, replacement_return_notes,
-  complaint_description, internal_notes,
+  complaint_description, internal_notes, customer_phone,
   entry_odometer, exit_odometer,
   created_at, last_updated_at, last_updated_by,
   vehicle:vehicles!job_cards_vehicle_id_fkey(plate_number, project_code, brand, model, chassis_number),
@@ -208,6 +208,7 @@ export interface CreateCaseInput {
   expected_completion_date: string | null
   complaint_description: string | null
   internal_notes: string | null
+  customer_phone: string | null
   has_replacement_vehicle: boolean
   replacement_vehicle_id: string | null
   /** Odometer of the replacement vehicle at handover. Required when
@@ -278,6 +279,7 @@ export async function createCase(input: CreateCaseInput): Promise<CaseRow> {
     expected_completion_date: input.expected_completion_date,
     complaint_description:   input.complaint_description,
     internal_notes:          input.internal_notes,
+    customer_phone:          input.customer_phone,
     has_replacement_vehicle: input.has_replacement_vehicle,
     replacement_vehicle_id:  input.replacement_vehicle_id,
     no_replacement_reason:   input.no_replacement_reason,

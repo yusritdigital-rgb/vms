@@ -129,6 +129,7 @@ export function exportInvoicesToExcel(invoices: any[], items: Record<string, any
   invoices.forEach(inv => {
     const invItems = items[inv.id] || []
     invItems.forEach((item: any) => {
+      const lineTotal = (item.quantity || 1) * (item.unit_price || 0)
       allItems.push({
         invoice_number: inv.invoice_number,
         invoice_date: inv.invoice_date,
@@ -136,9 +137,7 @@ export function exportInvoicesToExcel(invoices: any[], items: Record<string, any
         vehicle_plate: inv.vehicle_plate,
         item_type: item.item_type || '',
         description: item.description || '',
-        quantity: item.quantity || 1,
-        unit_price: item.unit_price || 0,
-        line_total: (item.quantity || 1) * (item.unit_price || 0),
+        value: lineTotal.toLocaleString('en-US'),
       })
     })
   })
@@ -152,9 +151,7 @@ export function exportInvoicesToExcel(invoices: any[], items: Record<string, any
       { header: 'اللوحة', key: 'vehicle_plate', width: 12 },
       { header: 'نوع البند', key: 'item_type', width: 12 },
       { header: 'الوصف', key: 'description', width: 30 },
-      { header: 'الكمية', key: 'quantity', width: 10 },
-      { header: 'سعر الوحدة', key: 'unit_price', width: 12 },
-      { header: 'الإجمالي', key: 'line_total', width: 12 },
+      { header: 'القيمة', key: 'value', width: 12 },
     ],
     data: allItems,
   }

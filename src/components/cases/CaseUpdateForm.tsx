@@ -47,11 +47,13 @@ interface Props {
       plate_number: string | null
       make_model: string | null
       exit_odometer: number | null
+      project_code: string | null
     }
     replacementVehicle?: {
       plate_number: string | null
       make_model: string | null
       return_odometer: number | null
+      project_code: string | null
     }
   }
   caseNumber?: string | null
@@ -331,6 +333,7 @@ export default function CaseUpdateForm({ caseId, currentStatus, isAr, onSaved, c
                     movementType: 'خروج' as const, // Main vehicle is exiting
                     odometer: vehicleData.mainVehicle.exit_odometer,
                     vehicleMakeModel: vehicleData.mainVehicle.make_model,
+                    projectCode: vehicleData.mainVehicle.project_code,
                   },
                 ]
                 if (vehicleData.replacementVehicle?.plate_number) {
@@ -340,6 +343,7 @@ export default function CaseUpdateForm({ caseId, currentStatus, isAr, onSaved, c
                     movementType: 'دخول' as const, // Replacement vehicle is entering
                     odometer: caseData?.replacement_return_odometer,
                     vehicleMakeModel: vehicleData.replacementVehicle.make_model,
+                    projectCode: vehicleData.replacementVehicle.project_code,
                   })
                 }
                 generateReceivingHandoverPDF({

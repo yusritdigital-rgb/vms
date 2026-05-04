@@ -31,6 +31,7 @@ export const SAUDI_CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   'نجران':           { lat: 17.4917, lng: 44.1322 },
   'خميس مشيط':       { lat: 18.3000, lng: 42.7333 },
   'الطائف':          { lat: 21.2703, lng: 40.4158 },
+  'القصيم':          { lat: 26.3299, lng: 43.7708 },
 }
 
 function city(name: string, cityAr: string): WorkshopSeed {
@@ -111,6 +112,10 @@ export const WORKSHOP_SEED: WorkshopSeed[] = [
 
   // Hail
   city('الكثيري', 'حائل'),
+  city('كروة', 'حائل'),
+
+  // Qassim
+  city('كروة', 'القصيم'),
 
   // Madinah
   city('نجم المركبة', 'المدينة المنورة'),
@@ -128,6 +133,7 @@ export const WORKSHOP_SEED: WorkshopSeed[] = [
   agency('نيسان'),
   agency('الوعلان'),
   agency('هلا السعودية'),
+  agency('وكالة ايسوزو'),
 
   // Nationwide non-agency
   nonAgency('بترومين'),

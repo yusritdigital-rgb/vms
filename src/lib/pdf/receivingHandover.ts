@@ -28,6 +28,7 @@ export interface VehicleHandoverData {
   movementType: MovementType
   odometer?: number | null
   vehicleMakeModel?: string | null
+  projectCode?: string | null
 }
 
 export interface ReceivingHandoverArgs {
@@ -92,6 +93,12 @@ export function generateReceivingHandoverPDF(args: ReceivingHandoverArgs): void 
                   <span class="info-label">نوع المركبة:</span>
                   <span class="info-value">${esc(vehicle.vehicleMakeModel) || '—'}</span>
                 </div>
+                ${vehicle.projectCode ? `
+                <div class="detail-row">
+                  <span class="info-label">المشروع:</span>
+                  <span class="info-value">${esc(vehicle.projectCode)}</span>
+                </div>
+                ` : ''}
                 ${vehicle.odometer != null ? `
                 <div class="detail-row">
                   <span class="info-label">العداد:</span>
@@ -121,7 +128,7 @@ export function generateReceivingHandoverPDF(args: ReceivingHandoverArgs): void 
                 <div class="item-box"></div>
               </div>
               <div class="checklist-item">
-                <span class="item-label">الاستبنة <span class="item-label-en">Spare Tire</span></span>
+                <span class="item-label">الإطار الاحتياطي <span class="item-label-en">Spare Tire</span></span>
                 <div class="item-box"></div>
               </div>
               <div class="checklist-item">
@@ -130,6 +137,26 @@ export function generateReceivingHandoverPDF(args: ReceivingHandoverArgs): void 
               </div>
               <div class="checklist-item">
                 <span class="item-label">مثلث السلامة <span class="item-label-en">Warning Triangle</span></span>
+                <div class="item-box"></div>
+              </div>
+              <div class="checklist-item">
+                <span class="item-label">جهاز تحديد المواقع GPS <span class="item-label-en">GPS Device</span></span>
+                <div class="item-box"></div>
+              </div>
+              <div class="checklist-item">
+                <span class="item-label">اللوحة المرورية <span class="item-label-en">License Plate</span></span>
+                <div class="item-box"></div>
+              </div>
+              <div class="checklist-item">
+                <span class="item-label">المساحات <span class="item-label-en">Wiper Blades</span></span>
+                <div class="item-box"></div>
+              </div>
+              <div class="checklist-item">
+                <span class="item-label">غطاء الإطار <span class="item-label-en">Tire Cover</span></span>
+                <div class="item-box"></div>
+              </div>
+              <div class="checklist-item">
+                <span class="item-label">فرش أرضية <span class="item-label-en">Floor Mats</span></span>
                 <div class="item-box"></div>
               </div>
             </div>
@@ -471,6 +498,8 @@ export function generateReceivingHandoverPDF(args: ReceivingHandoverArgs): void 
     </style>
 
     ${pageHtml}
+
+    ${companyFooterStrip(lang)}
   `
 
   const title = args.caseNumber

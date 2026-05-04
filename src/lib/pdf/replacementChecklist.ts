@@ -52,12 +52,14 @@ export interface ReplacementReturnArgs {
   mainVehicle: {
     plate_number: string | null
     make_model: string | null
+    project_code: string | null
   }
   replacementVehicle: {
     plate_number: string | null
     make_model: string | null
     outgoing_odometer: number | null
     return_odometer: number | null
+    project_code: string | null
   }
   returnNotes?: string | null
 }
@@ -68,11 +70,15 @@ export interface ReplacementReturnArgs {
 // sides on a single sheet.
 const CHECKLIST_ITEMS_AR: string[] = [
   'عدة',
-  'إطار احتياطي',
+  'الإطار الاحتياطي',
   'طفاية حريق',
   'مسجل',
   'فرش أرضية',
   'ديكورات',
+  'جهاز تحديد المواقع GPS',
+  'اللوحة المرورية',
+  'المساحات',
+  'غطاء الإطار',
 ]
 
 /** Compact vehicle identity card. */
@@ -579,6 +585,7 @@ export function generateReplacementReturnPDF(args: ReplacementReturnArgs): void 
       <div class="vcard-grid">
         <div class="kv"><span class="k">رقم اللوحة</span><span class="v">${esc(args.mainVehicle.plate_number) || '—'}</span></div>
         <div class="kv"><span class="k">نوع المركبة</span><span class="v">${esc(args.mainVehicle.make_model) || '—'}</span></div>
+        ${args.mainVehicle.project_code ? `<div class="kv"><span class="k">المشروع</span><span class="v">${esc(args.mainVehicle.project_code)}</span></div>` : ''}
       </div>
     </div>
 
@@ -588,6 +595,7 @@ export function generateReplacementReturnPDF(args: ReplacementReturnArgs): void 
       <div class="vcard-grid">
         <div class="kv"><span class="k">رقم اللوحة</span><span class="v">${esc(args.replacementVehicle.plate_number) || '—'}</span></div>
         <div class="kv"><span class="k">نوع المركبة</span><span class="v">${esc(args.replacementVehicle.make_model) || '—'}</span></div>
+        ${args.replacementVehicle.project_code ? `<div class="kv"><span class="k">المشروع</span><span class="v">${esc(args.replacementVehicle.project_code)}</span></div>` : ''}
       </div>
     </div>
 

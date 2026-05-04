@@ -384,6 +384,7 @@ export default function CaseDetailPage() {
                     movementType: 'خروج' as const,
                     odometer: c.exit_odometer,
                     vehicleMakeModel: [c.vehicle?.brand, c.vehicle?.model].filter(Boolean).join(' ') || null,
+                    projectCode: c.vehicle?.project_code ?? null,
                   },
                   ...(alt || c.replacement_vehicle ? [{
                     plateNumber: alt?.plate_number ?? c.replacement_vehicle?.plate_number ?? null,
@@ -391,6 +392,7 @@ export default function CaseDetailPage() {
                     movementType: 'دخول' as const,
                     odometer: c.replacement_return_odometer,
                     vehicleMakeModel: [alt?.brand ?? c.replacement_vehicle?.brand, alt?.model ?? c.replacement_vehicle?.model].filter(Boolean).join(' ') || null,
+                    projectCode: alt?.project_code ?? c.replacement_vehicle?.project_code ?? null,
                   }] : []),
                 ]
                 generateReceivingHandoverPDF({
@@ -499,11 +501,13 @@ export default function CaseDetailPage() {
                 plate_number: c.vehicle?.plate_number || null,
                 make_model: [c.vehicle?.brand, c.vehicle?.model].filter(Boolean).join(' ') || null,
                 exit_odometer: c.exit_odometer || null,
+                project_code: c.vehicle?.project_code || null,
               },
               replacementVehicle: c.replacement_vehicle ? {
                 plate_number: c.replacement_vehicle.plate_number || null,
                 make_model: [c.replacement_vehicle.brand, c.replacement_vehicle.model].filter(Boolean).join(' ') || null,
                 return_odometer: c.replacement_return_odometer || null,
+                project_code: c.replacement_vehicle.project_code || null,
               } : undefined,
             }}
             caseNumber={c.job_card_number}

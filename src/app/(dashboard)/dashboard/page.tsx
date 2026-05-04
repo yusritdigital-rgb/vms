@@ -43,6 +43,7 @@ import {
 import {
   exportOpenCasesExcel,
   exportClosedCasesExcel,
+  exportAllCasesExcel,
   exportAppointmentsExcel,
 } from '@/lib/dashboard/exports'
 import { toast } from '@/components/ui/Toast'
@@ -632,10 +633,10 @@ function now(_language: 'ar' | 'en' | string) {
 // existing layout/design is unaffected.
 // ─────────────────────────────────────────────────────
 function ExportBar({ isAr }: { isAr: boolean }) {
-  const [busy, setBusy] = useState<null | 'open' | 'closed' | 'appt'>(null)
+  const [busy, setBusy] = useState<null | 'open' | 'closed' | 'all' | 'appt'>(null)
 
   const run = async (
-    kind: 'open' | 'closed' | 'appt',
+    kind: 'open' | 'closed' | 'all' | 'appt',
     fn: () => Promise<void>,
     successMsg: string,
   ) => {
@@ -677,6 +678,15 @@ function ExportBar({ isAr }: { isAr: boolean }) {
       >
         {busy === 'closed' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
         {isAr ? 'تصدير الحالات المغلقة' : 'Export Closed Cases'}
+      </button>
+      <button
+        type="button"
+        disabled={busy !== null}
+        onClick={() => run('all', exportAllCasesExcel, isAr ? 'تم تصدير جميع الحالات' : 'All cases exported')}
+        className={btn}
+      >
+        {busy === 'all' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+        {isAr ? 'تصدير جميع الحالات' : 'Export All Cases'}
       </button>
       <button
         type="button"

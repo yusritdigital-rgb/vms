@@ -135,7 +135,11 @@ export default function InvoicesListPage() {
         const invItems = itemsByInvoice[inv.id] || []
         const laborItems = invItems.filter((i: any) => i.item_type === 'labor')
         const sparePartItems = invItems.filter((i: any) => i.item_type === 'spare_part')
-        
+
+        // Calculate total values
+        const laborValue = laborItems.reduce((sum: number, i: any) => sum + ((i.quantity || 1) * (i.unit_price || 0)), 0)
+        const partsValue = sparePartItems.reduce((sum: number, i: any) => sum + ((i.quantity || 1) * (i.unit_price || 0)), 0)
+
         return {
           invoice_number: inv.invoice_number,
           invoice_date: inv.invoice_date,
@@ -149,9 +153,9 @@ export default function InvoicesListPage() {
           vat_percentage: inv.vat_percentage,
           vat_amount: inv.vat_amount,
           total: inv.total,
-          labor_count: laborItems.length,
+          labor_value: laborValue.toLocaleString('en-US'),
           labor_items: laborItems.map((i: any) => `${i.description} (${i.quantity} × ${i.unit_price})`).join(' | '),
-          parts_count: sparePartItems.length,
+          parts_value: partsValue.toLocaleString('en-US'),
           parts_items: sparePartItems.map((i: any) => `${i.description} (${i.quantity} × ${i.unit_price})`).join(' | '),
         }
       })
@@ -171,9 +175,9 @@ export default function InvoicesListPage() {
           { header: 'ضريبة %', key: 'vat_percentage', width: 10 },
           { header: 'قيمة الضريبة', key: 'vat_amount', width: 14 },
           { header: 'الإجمالي', key: 'total', width: 14 },
-          { header: 'عدد الأعمال', key: 'labor_count', width: 12 },
+          { header: 'قيمة الأعمال', key: 'labor_value', width: 12 },
           { header: 'الأعمال', key: 'labor_items', width: 40 },
-          { header: 'عدد القطع', key: 'parts_count', width: 12 },
+          { header: 'قيمة القطع', key: 'parts_value', width: 12 },
           { header: 'قطع الغيار', key: 'parts_items', width: 40 },
         ],
         exportData,

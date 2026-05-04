@@ -91,22 +91,31 @@ export default function AdminWorkshopsPage() {
   const handleSeed = async () => {
     setSeeding(true)
     const supabase = createClient()
-    // Insert skipping duplicates (unique idx on workshop_name_ar + COALESCE(city_ar, '__national__'))
-    const { error } = await supabase.from('workshops').upsert(
-      WORKSHOP_SEED.map(w => ({
-        workshop_name_ar: w.workshop_name_ar,
-        city_ar: w.city_ar,
-        coverage_type: w.coverage_type,
-        is_agency: w.is_agency,
-        latitude: w.latitude,
-        longitude: w.longitude,
-      })),
-      { onConflict: 'workshop_name_ar,city_ar', ignoreDuplicates: true }
-    )
+    const { error } = await supabase
+      .from('workshops')
+      .insert(
+        WORKSHOP_SEED.map(w => ({
+          workshop_name_ar: w.workshop_name_ar,
+          city_ar: w.city_ar,
+          coverage_type: w.coverage_type,
+          is_agency: w.is_agency,
+          latitude: w.latitude,
+          longitude: w.longitude,
+        }))
+      )
     setSeeding(false)
-    if (error) toast.error(error.message)
-    else toast.success('تم تحميل قائمة الورش الأساسية')
-    load()
+    if (error) {
+      // Duplicates are OK - means workshops already exist
+      if (error.message.includes('duplicate') || error.code === '23505') {
+        toast.success('تم تحديث قائمة الورش (الورش الموجودة تم تجاهلها)')
+        load()
+      } else {
+        toast.error(error.message)
+      }
+    } else {
+      toast.success('تم تحميل قائمة الورش الأساسية')
+      load()
+    }
   }
 
   // ─── Modal ───
@@ -233,16 +242,14 @@ export default function AdminWorkshopsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {workshops.length === 0 && (
-            <button
-              onClick={handleSeed}
-              disabled={seeding}
-              className="px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-800 inline-flex items-center gap-2"
-            >
-              {seeding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              تحميل القائمة الأساسية
-            </button>
-          )}
+          <button
+            onClick={handleSeed}
+            disabled={seeding}
+            className="px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-800 inline-flex items-center gap-2"
+          >
+            {seeding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            {workshops.length === 0 ? 'تحميل القائمة الأساسية' : 'إعادة تحميل القائمة'}
+          </button>
           <button
             onClick={openAdd}
             className="px-4 py-2 text-sm bg-red-600 text-white rounded-xl hover:bg-red-700 inline-flex items-center gap-2"

@@ -109,6 +109,63 @@ export async function exportClosedCasesExcel(): Promise<void> {
   )
 }
 
+// ─── All cases (open + closed) ─────────────────────────────
+export async function exportAllCasesExcel(): Promise<void> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('job_cards')
+    .select(`
+      id, job_card_number, type, status, closure_type,
+      received_at, expected_completion_date, completed_at, delivered_at,
+      workshop_id, workshop_name, workshop_city,
+      vehicle_id, replacement_vehicle_id,
+      replacement_return_odometer, replacement_return_date, replacement_return_notes,
+      complaint_description, internal_notes, customer_phone,
+      entry_odometer, exit_odometer,
+      created_at, last_updated_at, last_updated_by,
+      vehicle:vehicles!job_cards_vehicle_id_fkey(plate_number, project_code, brand, model, chassis_number),
+      replacement_vehicle:vehicles!job_cards_replacement_vehicle_id_fkey(id, plate_number, project_code, brand, model)
+    `)
+    .order('received_at', { ascending: false })
+    .limit(10000)
+  if (error) {
+    logPgError('[dashboard/exports] all cases load failed', error)
+    return
+  }
+
+  const rows = ((data as CaseRowWithReplacement[]) ?? []).map(c => ({
+    case_number:   c.job_card_number,
+    plate:         c.vehicle?.plate_number ?? '',
+    vehicle_type:  vehicleType(c),
+    project:       c.vehicle?.project_code ?? '',
+    workshop:      [c.workshop_name, c.workshop_city].filter(Boolean).join(' — '),
+    status:        c.status,
+    received_at:   fmtDate(c.received_at),
+    completed_at:  fmtDate(c.completed_at ?? c.delivered_at),
+    closure_type:  c.closure_type ?? '',
+    replacement:   c.replacement_vehicle?.plate_number ?? '',
+  }))
+
+  await exportSingleSheet(
+    'جميع الحالات',
+    [
+      { header: 'رقم الحالة',     key: 'case_number',  width: 18 },
+      { header: 'رقم اللوحة',     key: 'plate',        width: 16 },
+      { header: 'نوع المركبة',    key: 'vehicle_type', width: 24 },
+      { header: 'المشروع',        key: 'project',      width: 14 },
+      { header: 'الورشة',         key: 'workshop',     width: 28 },
+      { header: 'الحالة',         key: 'status',       width: 26 },
+      { header: 'تاريخ الدخول',   key: 'received_at',  width: 20 },
+      { header: 'تاريخ الإغلاق',  key: 'completed_at', width: 20 },
+      { header: 'نوع الإغلاق',    key: 'closure_type', width: 16 },
+      { header: 'البديلة',        key: 'replacement',  width: 16 },
+    ],
+    rows,
+    'all_cases',
+    { noSummary: true },
+  )
+}
+
 // ─── Appointments ───────────────────────────────────────
 export async function exportAppointmentsExcel(): Promise<void> {
   const supabase = createClient()

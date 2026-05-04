@@ -35,6 +35,7 @@ export interface CaseRow {
   replacement_return_notes: string | null
   complaint_description: string | null
   internal_notes: string | null
+  customer_phone: string | null
   entry_odometer: number
   exit_odometer: number | null
   created_at: string
