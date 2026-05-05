@@ -9,6 +9,7 @@
 /** All allowed case statuses (Arabic labels = canonical values). */
 export const CASE_STATUSES = [
   'بانتظار تقدير',
+  'بانتظار تحديد النسبة',
   'بانتظار موافقة العميل على الاصلاح',
   'بانتظار اعتماد مدير الصيانة',
   'بانتظار عرض سعر الورشة (اصلاح)',
@@ -49,6 +50,7 @@ export function isCaseClosed(status: string | null | undefined): boolean {
  *  is not a workflow constraint, only visual aid. */
 export const STATUS_COLOR: Record<CaseStatus, string> = {
   'بانتظار تقدير':                       'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300',
+  'بانتظار تحديد النسبة':                 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300',
   'بانتظار موافقة العميل على الاصلاح':    'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
   'بانتظار اعتماد مدير الصيانة':         'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
   'بانتظار عرض سعر الورشة (اصلاح)':      'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',

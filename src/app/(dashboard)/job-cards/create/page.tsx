@@ -51,7 +51,7 @@ const NO_REPLACEMENT_REASONS: { value: string; label_ar: string }[] = [
 ]
 
 export default function CreateCasePage() {
-  const { language } = useTranslation()
+  const { language, t } = useTranslation()
   const isAr = language === 'ar'
   const router = useRouter()
 
@@ -225,10 +225,10 @@ export default function CreateCasePage() {
   const workshopOptions: SearchableOption[] = useMemo(
     () => workshops.map(w => ({
       value: w.id,
-      label: w.workshop_name_ar,
+      label: isAr ? w.workshop_name_ar : (t(`jobCards.workshops.${w.workshop_name_ar}` as any) || w.workshop_name_ar),
       sublabel: w.city_ar || ''
     })),
-    [workshops]
+    [workshops, isAr, t]
   )
 
   // ─── Validation ───

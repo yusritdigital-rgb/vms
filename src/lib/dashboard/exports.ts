@@ -31,8 +31,26 @@ function fmtDate(iso: string | null | undefined): string {
   // Use English numerals as required.
   return d.toLocaleString('en-GB', {
     year: 'numeric', month: '2-digit', day: '2-digit',
+  })
+}
+
+function fmtTime(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString('en-GB', {
     hour: '2-digit', minute: '2-digit',
   })
+}
+
+function calculateDays(receivedAt: string | null | undefined, completedAt: string | null | undefined): number {
+  if (!receivedAt) return 0
+  const start = new Date(receivedAt)
+  const end = completedAt ? new Date(completedAt) : new Date()
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0
+  const diffTime = end.getTime() - start.getTime()
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  return diffDays > 0 ? diffDays : 0
 }
 
 function vehicleType(c: CaseRow): string {
@@ -51,23 +69,27 @@ export async function exportOpenCasesExcel(): Promise<void> {
     project:        c.vehicle?.project_code ?? '',
     workshop:       [c.workshop_name, c.workshop_city].filter(Boolean).join(' — '),
     status:         c.status,
-    received_at:    fmtDate(c.received_at),
+    received_date:  fmtDate(c.received_at),
+    received_time:  fmtTime(c.received_at),
     last_updated:   fmtDate(c.last_updated_at ?? c.received_at),
+    days_count:     calculateDays(c.received_at, null),
     replacement:    c.replacement_vehicle?.plate_number ?? '',
   }))
 
   await exportSingleSheet(
     'الحالات المفتوحة',
     [
-      { header: 'رقم الحالة',     key: 'case_number',  width: 18 },
-      { header: 'رقم اللوحة',     key: 'plate',        width: 16 },
-      { header: 'نوع المركبة',    key: 'vehicle_type', width: 24 },
-      { header: 'المشروع',        key: 'project',      width: 14 },
-      { header: 'الورشة',         key: 'workshop',     width: 28 },
-      { header: 'الحالة',         key: 'status',       width: 26 },
-      { header: 'تاريخ الدخول',   key: 'received_at',  width: 20 },
-      { header: 'آخر تحديث',     key: 'last_updated', width: 20 },
-      { header: 'البديلة',        key: 'replacement',  width: 16 },
+      { header: 'رقم الحالة',     key: 'case_number',    width: 18 },
+      { header: 'رقم اللوحة',     key: 'plate',           width: 16 },
+      { header: 'نوع المركبة',    key: 'vehicle_type',    width: 24 },
+      { header: 'المشروع',        key: 'project',         width: 14 },
+      { header: 'الورشة',         key: 'workshop',        width: 28 },
+      { header: 'الحالة',         key: 'status',          width: 26 },
+      { header: 'تاريخ الدخول',   key: 'received_date',   width: 14 },
+      { header: 'وقت الدخول',     key: 'received_time',   width: 12 },
+      { header: 'آخر تحديث',     key: 'last_updated',    width: 14 },
+      { header: 'عدد الأيام',     key: 'days_count',      width: 12 },
+      { header: 'البديلة',        key: 'replacement',     width: 16 },
     ],
     data,
     'open_cases',
@@ -79,29 +101,35 @@ export async function exportOpenCasesExcel(): Promise<void> {
 export async function exportClosedCasesExcel(): Promise<void> {
   const rows = (await listClosedCases()) as CaseRowWithReplacement[]
   const data = rows.map(c => ({
-    case_number:   c.job_card_number,
-    plate:         c.vehicle?.plate_number ?? '',
-    vehicle_type:  vehicleType(c),
-    project:       c.vehicle?.project_code ?? '',
-    workshop:      [c.workshop_name, c.workshop_city].filter(Boolean).join(' — '),
-    status:        c.status,
-    received_at:   fmtDate(c.received_at),
-    completed_at:  fmtDate(c.completed_at ?? c.delivered_at),
-    closure_type:  c.closure_type ?? '',
+    case_number:    c.job_card_number,
+    plate:          c.vehicle?.plate_number ?? '',
+    vehicle_type:   vehicleType(c),
+    project:        c.vehicle?.project_code ?? '',
+    workshop:       [c.workshop_name, c.workshop_city].filter(Boolean).join(' — '),
+    status:         c.status,
+    received_date:  fmtDate(c.received_at),
+    received_time:  fmtTime(c.received_at),
+    completed_date: fmtDate(c.completed_at ?? c.delivered_at),
+    completed_time: fmtTime(c.completed_at ?? c.delivered_at),
+    closure_type:   c.closure_type ?? '',
+    days_count:     calculateDays(c.received_at, c.completed_at ?? c.delivered_at),
   }))
 
   await exportSingleSheet(
     'الحالات المغلقة',
     [
-      { header: 'رقم الحالة',     key: 'case_number',  width: 18 },
-      { header: 'رقم اللوحة',     key: 'plate',        width: 16 },
-      { header: 'نوع المركبة',    key: 'vehicle_type', width: 24 },
-      { header: 'المشروع',        key: 'project',      width: 14 },
-      { header: 'الورشة',         key: 'workshop',     width: 28 },
-      { header: 'الحالة',         key: 'status',       width: 26 },
-      { header: 'تاريخ الدخول',   key: 'received_at',  width: 20 },
-      { header: 'تاريخ الإغلاق',  key: 'completed_at', width: 20 },
-      { header: 'نوع الإغلاق',    key: 'closure_type', width: 16 },
+      { header: 'رقم الحالة',     key: 'case_number',    width: 18 },
+      { header: 'رقم اللوحة',     key: 'plate',           width: 16 },
+      { header: 'نوع المركبة',    key: 'vehicle_type',    width: 24 },
+      { header: 'المشروع',        key: 'project',         width: 14 },
+      { header: 'الورشة',         key: 'workshop',        width: 28 },
+      { header: 'الحالة',         key: 'status',          width: 26 },
+      { header: 'تاريخ الدخول',   key: 'received_date',   width: 14 },
+      { header: 'وقت الدخول',     key: 'received_time',   width: 12 },
+      { header: 'تاريخ الإغلاق',  key: 'completed_date',  width: 14 },
+      { header: 'وقت الإغلاق',    key: 'completed_time',  width: 12 },
+      { header: 'نوع الإغلاق',    key: 'closure_type',    width: 16 },
+      { header: 'عدد الأيام',     key: 'days_count',      width: 12 },
     ],
     data,
     'closed_cases',
@@ -134,31 +162,37 @@ export async function exportAllCasesExcel(): Promise<void> {
   }
 
   const rows = ((data as CaseRowWithReplacement[]) ?? []).map(c => ({
-    case_number:   c.job_card_number,
-    plate:         c.vehicle?.plate_number ?? '',
-    vehicle_type:  vehicleType(c),
-    project:       c.vehicle?.project_code ?? '',
-    workshop:      [c.workshop_name, c.workshop_city].filter(Boolean).join(' — '),
-    status:        c.status,
-    received_at:   fmtDate(c.received_at),
-    completed_at:  fmtDate(c.completed_at ?? c.delivered_at),
-    closure_type:  c.closure_type ?? '',
-    replacement:   c.replacement_vehicle?.plate_number ?? '',
+    case_number:    c.job_card_number,
+    plate:          c.vehicle?.plate_number ?? '',
+    vehicle_type:   vehicleType(c),
+    project:        c.vehicle?.project_code ?? '',
+    workshop:       [c.workshop_name, c.workshop_city].filter(Boolean).join(' — '),
+    status:         c.status,
+    received_date:  fmtDate(c.received_at),
+    received_time:  fmtTime(c.received_at),
+    completed_date: fmtDate(c.completed_at ?? c.delivered_at),
+    completed_time: fmtTime(c.completed_at ?? c.delivered_at),
+    closure_type:   c.closure_type ?? '',
+    days_count:     calculateDays(c.received_at, c.completed_at ?? c.delivered_at),
+    replacement:    c.replacement_vehicle?.plate_number ?? '',
   }))
 
   await exportSingleSheet(
     'جميع الحالات',
     [
-      { header: 'رقم الحالة',     key: 'case_number',  width: 18 },
-      { header: 'رقم اللوحة',     key: 'plate',        width: 16 },
-      { header: 'نوع المركبة',    key: 'vehicle_type', width: 24 },
-      { header: 'المشروع',        key: 'project',      width: 14 },
-      { header: 'الورشة',         key: 'workshop',     width: 28 },
-      { header: 'الحالة',         key: 'status',       width: 26 },
-      { header: 'تاريخ الدخول',   key: 'received_at',  width: 20 },
-      { header: 'تاريخ الإغلاق',  key: 'completed_at', width: 20 },
-      { header: 'نوع الإغلاق',    key: 'closure_type', width: 16 },
-      { header: 'البديلة',        key: 'replacement',  width: 16 },
+      { header: 'رقم الحالة',     key: 'case_number',    width: 18 },
+      { header: 'رقم اللوحة',     key: 'plate',           width: 16 },
+      { header: 'نوع المركبة',    key: 'vehicle_type',    width: 24 },
+      { header: 'المشروع',        key: 'project',         width: 14 },
+      { header: 'الورشة',         key: 'workshop',        width: 28 },
+      { header: 'الحالة',         key: 'status',          width: 26 },
+      { header: 'تاريخ الدخول',   key: 'received_date',   width: 14 },
+      { header: 'وقت الدخول',     key: 'received_time',   width: 12 },
+      { header: 'تاريخ الإغلاق',  key: 'completed_date',  width: 14 },
+      { header: 'وقت الإغلاق',    key: 'completed_time',  width: 12 },
+      { header: 'نوع الإغلاق',    key: 'closure_type',    width: 16 },
+      { header: 'عدد الأيام',     key: 'days_count',      width: 12 },
+      { header: 'البديلة',        key: 'replacement',     width: 16 },
     ],
     rows,
     'all_cases',

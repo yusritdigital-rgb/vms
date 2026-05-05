@@ -6,6 +6,7 @@
 // =====================================================
 
 import { CASE_STATUSES } from '@/lib/cases/statuses'
+import { useTranslation } from '@/hooks/useTranslation'
 
 interface Props {
   value: string
@@ -15,6 +16,9 @@ interface Props {
 }
 
 export default function CaseStatusSelect({ value, onChange, disabled, className }: Props) {
+  const { language, t } = useTranslation()
+  const isAr = language === 'ar'
+
   return (
     <select
       value={value}
@@ -25,7 +29,11 @@ export default function CaseStatusSelect({ value, onChange, disabled, className 
         'text-sm px-2.5 py-1.5 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white w-full disabled:opacity-50'
       }
     >
-      {CASE_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+      {CASE_STATUSES.map(s => (
+        <option key={s} value={s}>
+          {isAr ? s : t(`jobCards.statuses.${s}` as any) || s}
+        </option>
+      ))}
     </select>
   )
 }

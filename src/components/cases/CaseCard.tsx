@@ -12,6 +12,7 @@ import { Briefcase, Car, Clock, ExternalLink, Sparkles } from 'lucide-react'
 import type { CaseRow } from '@/lib/cases/types'
 import { STATUS_COLOR } from '@/lib/cases/statuses'
 import { daysSince, expectedDueLabel, relativeTime } from '@/lib/cases/formatCase'
+import { useTranslation } from '@/hooks/useTranslation'
 import CaseUpdateForm from './CaseUpdateForm'
 
 interface Props {
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export default function CaseCard({ c, isAr, highlight, onSaved }: Props) {
+  const { t } = useTranslation()
   const badge = STATUS_COLOR[c.status as keyof typeof STATUS_COLOR]
     || 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
 
@@ -36,6 +38,13 @@ export default function CaseCard({ c, isAr, highlight, onSaved }: Props) {
   // Calculate progress bar width (max 30 days for full bar)
   const daysProgress = Math.min((days || 0) / 30, 1) * 100
   const daysColor = (days || 0) > 7 ? 'bg-red-500' : (days || 0) > 3 ? 'bg-orange-500' : 'bg-emerald-500'
+
+  // Translate status
+  const statusLabel = isAr ? c.status : (t(`jobCards.statuses.${c.status}` as any) || c.status)
+  // Translate workshop name
+  const workshopLabel = isAr ? c.workshop_name : (t(`jobCards.workshops.${c.workshop_name}` as any) || c.workshop_name)
+  // Translate city
+  const cityLabel = isAr ? c.workshop_city : (t(`common.cities.${c.workshop_city}` as any) || c.workshop_city)
 
   return (
     <div
@@ -72,10 +81,11 @@ export default function CaseCard({ c, isAr, highlight, onSaved }: Props) {
                 {c.vehicle.project_code}
               </span>
             )}
-            {c.workshop_name && (
+            {workshopLabel && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-[11px]">
                 <Briefcase className="w-3 h-3" />
-                {c.workshop_name}
+                {workshopLabel}
+                {cityLabel && <span className="text-blue-500/60"> — {cityLabel}</span>}
               </span>
             )}
             {due && (
@@ -97,7 +107,7 @@ export default function CaseCard({ c, isAr, highlight, onSaved }: Props) {
 
         <div className="flex flex-col items-end gap-2">
           <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${badge} whitespace-nowrap`}>
-            {c.status}
+            {statusLabel}
           </span>
           {/* Days progress bar */}
           {days !== null && (

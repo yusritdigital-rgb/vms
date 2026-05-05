@@ -52,7 +52,7 @@ interface ReplacementVehicle {
 export default function CaseDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
-  const { language } = useTranslation()
+  const { language, t } = useTranslation()
   const isAr = language === 'ar'
   const { isAdmin } = usePermissions()
 
@@ -412,8 +412,14 @@ export default function CaseDetailPage() {
 
         {/* Workshop */}
         <InfoBlock title={isAr ? 'الورشة' : 'Workshop'} icon={<Wrench className="w-4 h-4" />}>
-          <Row k={isAr ? 'الاسم' : 'Name'} v={c.workshop_name ?? '—'} />
-          <Row k={isAr ? 'المدينة' : 'City'} v={c.workshop_city ?? '—'} />
+          <Row 
+            k={isAr ? 'الاسم' : 'Name'} 
+            v={isAr ? (c.workshop_name ?? '—') : ((t(`jobCards.workshops.${c.workshop_name}` as any) || c.workshop_name) ?? '—')} 
+          />
+          <Row 
+            k={isAr ? 'المدينة' : 'City'} 
+            v={isAr ? (c.workshop_city ?? '—') : ((t(`common.cities.${c.workshop_city}` as any) || c.workshop_city) ?? '—')} 
+          />
           {!closed && (
             <button
               onClick={() => setShowWorkshopModal(true)}
@@ -539,16 +545,20 @@ export default function CaseDetailPage() {
             </div>
             <div className="p-4 overflow-y-auto max-h-[60vh]">
               <div className="space-y-2">
-                {WORKSHOPS.map((workshop) => (
-                  <button
-                    key={workshop.id}
-                    onClick={() => handleWorkshopChange(workshop.id)}
-                    className="w-full text-start px-4 py-3 rounded-lg border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
-                  >
-                    <div className="font-medium text-gray-900 dark:text-white">{workshop.name_ar}</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">{workshop.city_ar}</div>
-                  </button>
-                ))}
+                {WORKSHOPS.map((workshop) => {
+                  const workshopLabel = isAr ? workshop.name_ar : (t(`jobCards.workshops.${workshop.name_ar}` as any) || workshop.name_ar)
+                  const cityLabel = isAr ? workshop.city_ar : (t(`common.cities.${workshop.city_ar}` as any) || workshop.city_ar)
+                  return (
+                    <button
+                      key={workshop.id}
+                      onClick={() => handleWorkshopChange(workshop.id)}
+                      className="w-full text-start px-4 py-3 rounded-lg border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
+                    >
+                      <div className="font-medium text-gray-900 dark:text-white">{workshopLabel}</div>
+                      {cityLabel && <div className="text-xs text-gray-500 dark:text-gray-400">{cityLabel}</div>}
+                    </button>
+                  )
+                })}
               </div>
             </div>
             <div className="p-4 border-t border-gray-200 dark:border-slate-700">
