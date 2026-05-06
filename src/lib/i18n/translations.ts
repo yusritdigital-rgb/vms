@@ -425,7 +425,7 @@ export const translations = {
       },
       workshops: {
         'افاق الحديثة': 'Afaq Al-Haditha',
-        'الاوائل': 'Al-Awail',
+        'الاوائل': 'Pioneer',
         'الدوحة': 'Al-Doha',
         'ساك': 'SAK',
         'نجم المركبة': 'Najam Al-Markaba',

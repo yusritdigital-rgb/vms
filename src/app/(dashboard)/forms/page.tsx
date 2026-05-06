@@ -45,6 +45,13 @@ export default function FormsPage() {
         </div>
         <div className="flex items-center gap-2">
           <Link
+            href="/forms/awail-invoices"
+            className="px-3 py-2 text-sm bg-white/15 hover:bg-white/25 rounded-lg inline-flex items-center gap-2 font-medium"
+          >
+            <ListOrdered className="w-4 h-4" />
+            {language === 'ar' ? 'حالات الأوائل' : 'Pioneer Cases'}
+          </Link>
+          <Link
             href="/forms/invoices"
             className="px-3 py-2 text-sm bg-white/15 hover:bg-white/25 rounded-lg inline-flex items-center gap-2 font-medium"
           >
