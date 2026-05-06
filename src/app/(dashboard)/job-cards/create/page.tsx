@@ -129,7 +129,10 @@ export default function CreateCasePage() {
   const [altEntryOdo, setAltEntryOdo] = useState<string>('')
   const [receivedAt, setReceivedAt] = useState(() => {
     const d = new Date(); d.setSeconds(0, 0)
-    return d.toISOString().slice(0, 16) // yyyy-MM-ddTHH:mm (local)
+    // Format as local datetime-local string (yyyy-MM-ddTHH:mm)
+    const offset = d.getTimezoneOffset() * 60000
+    const localISOTime = new Date(d.getTime() - offset).toISOString().slice(0, 16)
+    return localISOTime
   })
   // Expected completion date is no longer captured at create time.
   // It is collected later — only when the operator flips the case
@@ -565,7 +568,7 @@ export default function CreateCasePage() {
                 className={inputCls}
               >
                 {CASE_STATUSES.map(s => (
-                  <option key={s} value={s}>{s}</option>
+                  <option key={s} value={s}>{isAr ? s : (t(`jobCards.statuses.${s}` as any) || s)}</option>
                 ))}
               </select>
             </div>
