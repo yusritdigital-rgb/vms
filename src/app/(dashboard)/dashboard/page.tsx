@@ -539,9 +539,10 @@ export default function DashboardPage() {
             {recent.map((c) => {
               const badge = STATUS_COLOR[c.status as keyof typeof STATUS_COLOR]
                 || 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+              const isClosed = isCaseClosed(c.status)
               return (
                 <li key={c.id}>
-                  <Link href={`/job-cards/${c.id}`}
+                  <Link href={isClosed ? `/history` : `/job-cards/${c.id}`}
                     className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors"
                   >
                     <div className="flex items-center gap-3 min-w-0">

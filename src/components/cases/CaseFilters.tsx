@@ -9,6 +9,7 @@
 import { Briefcase, Clock, Filter, Search, X } from 'lucide-react'
 import { CASE_STATUSES } from '@/lib/cases/statuses'
 import { isClosedStatus } from '@/lib/cases/types'
+import { useTranslation } from '@/hooks/useTranslation'
 
 export type DateRangeKey = 'all' | 'today' | '7d' | '30d'
 
@@ -39,6 +40,7 @@ interface Props {
 }
 
 export default function CaseFilters({ value, onChange, projectOptions, workshopOptions, isAr, openOnly = true }: Props) {
+  const { t } = useTranslation()
   const set = <K extends keyof CaseFiltersValue>(k: K, v: CaseFiltersValue[K]) =>
     onChange({ ...value, [k]: v })
 
@@ -83,7 +85,11 @@ export default function CaseFilters({ value, onChange, projectOptions, workshopO
           className="text-sm px-2.5 py-1.5 border border-gray-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white min-w-[160px]"
         >
           <option value="all">{isAr ? 'كل الورش' : 'All workshops'}</option>
-          {workshopOptions.map(w => <option key={w} value={w}>{w}</option>)}
+          {workshopOptions.map(w => (
+            <option key={w} value={w}>
+              {isAr ? w : (t(`jobCards.workshops.${w}` as any) || w)}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -126,7 +132,11 @@ export default function CaseFilters({ value, onChange, projectOptions, workshopO
           className="text-sm px-2.5 py-1.5 border border-gray-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white min-w-[200px]"
         >
           <option value="all">{isAr ? 'كل الحالات' : 'All statuses'}</option>
-          {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
+          {statusOptions.map(s => (
+            <option key={s} value={s}>
+              {isAr ? s : (t(`jobCards.statuses.${s}` as any) || s)}
+            </option>
+          ))}
         </select>
       </div>
 

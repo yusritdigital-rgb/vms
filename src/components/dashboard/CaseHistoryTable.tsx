@@ -122,7 +122,7 @@ export default function CaseHistoryTable() {
                 return (
                   <tr key={r.id} className="border-b border-gray-50 dark:border-slate-800/60 hover:bg-gray-50/60 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="py-2.5 pe-3">
-                      <Link href={`/job-cards/${r.id}`} className="font-mono text-xs font-semibold text-red-600 hover:underline">
+                      <Link href="/history" className="font-mono text-xs font-semibold text-red-600 hover:underline">
                         {r.job_card_number}
                       </Link>
                     </td>

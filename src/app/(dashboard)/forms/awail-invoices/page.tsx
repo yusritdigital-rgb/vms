@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/components/ui/Toast'
 import { Loader2, FileText, Plus, Car, Calendar, Wrench, ArrowRight, Info } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 interface CaseRow {
   id: string
@@ -22,6 +23,7 @@ interface CaseRow {
     model: string | null
     project_code: string | null
   } | null
+  invoice_id?: string | null
 }
 
 interface CaseDetail {
@@ -57,7 +59,7 @@ export default function AwailInvoicesPage() {
 
   const loadCases = async () => {
     setLoading(true)
-    const { data, error } = await supabase
+    const { data: casesData, error: casesError } = await supabase
       .from('job_cards')
       .select(`
         id, job_card_number, workshop_name, workshop_city, received_at, status, complaint_description, type,
@@ -66,12 +68,36 @@ export default function AwailInvoicesPage() {
       .or('workshop_name.eq.الاوائل')
       .order('received_at', { ascending: false })
 
-    if (error) {
+    if (casesError) {
       toast.error(isAr ? 'فشل تحميل الحالات' : 'Failed to load cases')
-      console.error(error)
-    } else {
-      setCases(data as CaseRow[] || [])
+      console.error(casesError)
+      setLoading(false)
+      return
     }
+
+    const cases = casesData as CaseRow[] || []
+    
+    // Check for existing invoices for each case
+    const jobCardNumbers = cases.map(c => c.job_card_number)
+    if (jobCardNumbers.length > 0) {
+      const { data: invoicesData } = await supabase
+        .from('invoices')
+        .select('job_card_number, id')
+        .in('job_card_number', jobCardNumbers)
+      
+      const invoiceMap = new Map<string, string>()
+      invoicesData?.forEach(inv => {
+        if (inv.job_card_number) {
+          invoiceMap.set(inv.job_card_number, inv.id)
+        }
+      })
+      
+      cases.forEach(c => {
+        c.invoice_id = invoiceMap.get(c.job_card_number) || null
+      })
+    }
+
+    setCases(cases)
     setLoading(false)
   }
 
@@ -112,6 +138,7 @@ export default function AwailInvoicesPage() {
           vat_amount: 0,
           total: 0,
           notes: c.complaint_description || null,
+          job_card_number: c.job_card_number,
         })
         .select()
         .single()
@@ -291,14 +318,24 @@ export default function AwailInvoicesPage() {
                       <Info className="w-4 h-4" />
                       {isAr ? 'التفاصيل' : 'Details'}
                     </button>
-                    <button
-                      onClick={() => handleCreateInvoice(c)}
-                      disabled={creating}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
-                    >
-                      {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                      {isAr ? 'إنشاء فاتورة' : 'Create Invoice'}
-                    </button>
+                    {c.invoice_id ? (
+                      <Link
+                        href={`/forms/invoices/${c.invoice_id}`}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
+                      >
+                        <FileText className="w-4 h-4" />
+                        {isAr ? 'عرض الفاتورة' : 'View Invoice'}
+                      </Link>
+                    ) : (
+                      <button
+                        onClick={() => handleCreateInvoice(c)}
+                        disabled={creating}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
+                      >
+                        {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                        {isAr ? 'إنشاء فاتورة' : 'Create Invoice'}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
